@@ -1,7 +1,15 @@
 [project]
 name = "core"
 version = "0.1.0"
+repository = "https://github.com/Ryoga-exe/ChiffonCore"
+
 [build]
 sources = ["src"]
 target = { type = "directory", path = "target" }
+clock_type = "posedge"
+reset_type = "sync_high"
+omit_project_prefix = true
+implicit_parameter_types = ["string"]
+expand_inside_operation = true
+sourcemap_target = { type = "directory", path = "target/sourcemap" }
 
