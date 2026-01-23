@@ -93,12 +93,13 @@ module core (
         }
     }
 
-    // let inst_pc  : Addr = if_fifo_rdata.addr;
-    // let inst_bits: Inst = if_fifo_rdata.bits;
+    // Debug
+    let inst_pc  : Addr = if_fifo_rdata.addr;
+    let inst_bits: Inst = if_fifo_rdata.bits;
 
-    // always_ff {
-    //     if if_fifo_rvalid {
-    //         $display("%h : %h", inst_pc, inst_bits);
-    //     }
-    // }
+    always_ff {
+        if if_fifo_rvalid {
+            $display("%h : %h", inst_pc, inst_bits);
+        }
+    }
 }
