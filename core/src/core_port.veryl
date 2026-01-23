@@ -15,24 +15,60 @@ module core_port (
     mem_rvalid: input  logic      ,
     mem_rdata : input  logic<ILEN>,
 ) {
-    inst bus: membus_if::<ILEN, XLEN>;
+    inst i_membus: membus_if::<ILEN, XLEN>; // for instruction fetch
+    inst d_membus: membus_if::<MEM_DATA_WIDTH, XLEN>; // for load/store
+
+    var memarb_last_i: logic;
+
+    always_ff {
+        if_reset {
+            memarb_last_i = 0;
+        } else {
+            if mem_ready {
+                memarb_last_i = !d_membus.valid;
+            }
+        }
+    }
 
     // core drives: bus.valid/addr/wen/wdata
     // outside drives: bus.ready/rvalid/rdata
     always_comb {
-        mem_valid = bus.valid;
-        mem_addr  = bus.addr;
-        mem_wen   = bus.wen;
-        mem_wdata = bus.wdata;
+        mem_valid = i_membus.valid;
+        mem_addr  = i_membus.addr;
+        mem_wen   = i_membus.wen;
+        mem_wdata = i_membus.wdata;
 
-        bus.ready  = mem_ready;
-        bus.rvalid = mem_rvalid;
-        bus.rdata  = mem_rdata;
+        i_membus.ready  = mem_ready;
+        i_membus.rvalid = mem_rvalid;
+        i_membus.rdata  = mem_rdata;
+    }
+
+    always_comb {
+        i_membus.ready  = mem_ready && !d_membus.valid;
+        i_membus.rvalid = mem_rvalid && memarb_last_i;
+        i_membus.rdata  = mem_rdata;
+
+        d_membus.ready  = mem_ready;
+        d_membus.rvalid = mem_rvalid && !memarb_last_i;
+        d_membus.rdata  = mem_rdata;
+
+        mem_valid = i_membus.valid | d_membus.valid;
+
+        if d_membus.valid {
+            mem_addr  = d_membus.addr;
+            mem_wen   = d_membus.wen;
+            mem_wdata = d_membus.wdata;
+        } else {
+            mem_addr  = i_membus.addr;
+            mem_wen   = 0; // fetch always
+            mem_wdata = 'x;
+        }
     }
 
     inst u_core: core (
-        clk        ,
-        rst        ,
-        membus: bus,
+        clk       ,
+        rst       ,
+        i_membus  ,
+        d_membus  ,
     );
 }
