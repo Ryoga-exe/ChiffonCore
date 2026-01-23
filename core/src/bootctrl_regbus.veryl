@@ -1,0 +1,93 @@
+module bootctrl_regbus #(
+    param BOOT_BASE: u32 = 32'h0000_1000,
+) (
+    clk: input clock,
+    rst: input reset,
+
+    // regbus
+    WRADDR: input  logic<16>,
+    BYTEEN: input  logic<4> ,
+    WREN  : input  logic    ,
+    WDATA : input  logic<32>,
+    RDADDR: input  logic<16>,
+    RDEN  : input  logic    ,
+    RDATA : output logic<32>,
+
+    // control outputs
+    run       : output logic    ,
+    hold_reset: output logic    ,
+    dram_base : output logic<32>,
+    entry_pc  : output logic<32>,
+) {
+    const RA_STATUS  : logic<16> = BOOT_BASE[15:0] + 16'h0000;
+    const RA_CTRL    : logic<16> = BOOT_BASE[15:0] + 16'h0004;
+    const RA_DRAMBASE: logic<16> = BOOT_BASE[15:0] + 16'h0008;
+    const RA_ENTRYPC : logic<16> = BOOT_BASE[15:0] + 16'h000C;
+
+    // Write
+    always_ff {
+        if_reset {
+            run        = 1'b0;
+            hold_reset = 1'b1;
+            dram_base  = 32'h0000_0000;
+            entry_pc   = 32'h0000_0000;
+        } else {
+            if WREN {
+                case WRADDR {
+                    RA_CTRL: {
+                        // HOLD_RESET is level (bit0)
+                        if BYTEEN[0] {
+                            hold_reset = WDATA[0];
+                        }
+                        // START_PULSE is W1P (bit1). Once set, stays 1 until reset.
+                        if BYTEEN[0] && WDATA[1] {
+                            run = 1'b1;
+                        }
+                    }
+                    RA_DRAMBASE: {
+                        if BYTEEN[0] {
+                            dram_base[7:0] = WDATA[7:0];
+                        }
+                        if BYTEEN[1] {
+                            dram_base[15:8] = WDATA[15:8];
+                        }
+                        if BYTEEN[2] {
+                            dram_base[23:16] = WDATA[23:16];
+                        }
+                        if BYTEEN[3] {
+                            dram_base[31:24] = WDATA[31:24];
+                        }
+                    }
+                    RA_ENTRYPC: {
+                        if BYTEEN[0] {
+                            entry_pc[7:0] = WDATA[7:0];
+                        }
+                        if BYTEEN[1] {
+                            entry_pc[15:8] = WDATA[15:8];
+                        }
+                        if BYTEEN[2] {
+                            entry_pc[23:16] = WDATA[23:16];
+                        }
+                        if BYTEEN[3] {
+                            entry_pc[31:24] = WDATA[31:24];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Read
+    always_comb {
+        RDATA = 32'h0000_0000;
+        if RDEN {
+            RDATA = case RDADDR {
+                RA_STATUS  : {30'h0, hold_reset, run},
+                RA_CTRL    : {31'h0, hold_reset}, // START is W1P; reading returns HOLD_RESET only.
+                RA_DRAMBASE: dram_base,
+                RA_ENTRYPC : entry_pc,
+                default    : 32'h0000_0000,
+            };
+        }
+    }
+}
