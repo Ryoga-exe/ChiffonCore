@@ -11,7 +11,7 @@ module tb_basic;
 
   localparam integer STEP = 8;
 
-  localparam string MEMMDATA = "sample.hex";
+  localparam string MEMDATA = "sample.hex";
 
   // DUT ports (design_1_wrapper のポートに合わせる)
   logic        ACLK;
