@@ -30,8 +30,8 @@ RUN git clone https://github.com/riscv-software-src/riscv-tests /opt/riscv-tests
  # env/p/link.ld の先頭を 0x00000000 にする
  && sed -i -E 's/^[[:space:]]*\.[[:space:]]*=[[:space:]]*0x[0-9a-fA-F]+[[:space:]]*;/  . = 0x00000000;/' env/p/link.ld \
  # toolchain prefix を riscv64 に
- && make -j"$(nproc)" XLEN=32 RISCV_PREFIX=riscv64-unknown-elf isa \
- && make XLEN=32 RISCV_PREFIX=riscv64-unknown-elf install-isa
+ && make -j"$(nproc)" XLEN=32 RISCV_PREFIX=riscv64-unknown-elf- isa \
+ && make XLEN=32 RISCV_PREFIX=riscv64-unknown-elf- install-isa
 
 # tools
 COPY bin2hex.py /usr/local/bin/bin2hex.py
