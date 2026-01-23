@@ -1,4 +1,5 @@
 import eei::*;
+import corectrl::*;
 
 module core (
     clk   : input   clock                          ,
