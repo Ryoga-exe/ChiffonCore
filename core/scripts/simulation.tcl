@@ -88,5 +88,5 @@ add_files -norecurse $wrapper_file
 update_compile_order -fileset sources_1
 update_compile_order -fileset sim_1
 
-puts "DONE: Project created at: $proj_dir"
+puts "DONE: Project created at: $project_dir"
 puts "Next: In GUI, Flow Navigator > Run Simulation > Run Behavioral Simulation"
