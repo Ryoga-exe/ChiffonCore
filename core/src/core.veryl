@@ -112,8 +112,8 @@ module core (
         }
     }
 
-    assign control_hazard         = inst_valid && inst_ctrl.is_jump;
-    assign control_hazard_pc_next = alu_result & ~1;
+    assign control_hazard         = inst_valid && (inst_ctrl.is_jump || inst_is_br(inst_ctrl) && brunit_take);
+    assign control_hazard_pc_next = if inst_is_br(inst_ctrl) ? inst_pc + inst_imm : alu_result & ~1;
 
     // ====================================================
     // * Instruction Decoder
@@ -221,6 +221,21 @@ module core (
         membus: d_membus   ,
     );
 
+    // ====================================================
+    // * Brunit
+    // ====================================================
+    var brunit_take: logic;
+
+    inst bru: brunit (
+        funct3: inst_ctrl.funct3,
+        op1                     ,
+        op2                     ,
+        take  : brunit_take     ,
+    );
+
+    // ====================================================
+    // * Test benches (for Debug)
+    // ====================================================
     var clock_count: u64;
 
     always_ff {
@@ -243,6 +258,9 @@ module core (
                 $display("  mem rdata : %h", memu_rdata);
                 if if_fifo_rready && inst_ctrl.rwb_en {
                     $display("  reg[%d] <= %h", rd_addr, wb_data);
+                }
+                if inst_is_br(inst_ctrl) {
+                    $display("  br take   : %b", brunit_take);
                 }
             }
         }
