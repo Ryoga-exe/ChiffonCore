@@ -1,0 +1,111 @@
+module ifetch_axi_read #(
+    param AXI_ID_W  : u32 = 1 ,
+    param AXI_ADDR_W: u32 = 32,
+    param AXI_DATA_W: u32 = 32,
+
+    param DATA_WIDTH: u32 = 32,
+    param ADDR_WIDTH: u32 = 20,
+) (
+    clk: input clock,
+    rst: input reset,
+
+    run: input logic,
+
+    dram_base: input logic<32>,
+    entry_pc : input logic<32>,
+
+    // membus (plain wires; matches membus_if)
+    mem_valid : input  logic            ,
+    mem_ready : output logic            ,
+    mem_addr  : input  logic<ADDR_WIDTH>,
+    mem_wen   : input  logic            ,
+    mem_wdata : input  logic<DATA_WIDTH>,
+    mem_rvalid: output logic            ,
+    mem_rdata : output logic<DATA_WIDTH>,
+
+    // AXI Read Address
+    M_AXI_ARID   : output logic<AXI_ID_W>  ,
+    M_AXI_ARADDR : output logic<AXI_ADDR_W>,
+    M_AXI_ARLEN  : output logic<8>         ,
+    M_AXI_ARSIZE : output logic<3>         ,
+    M_AXI_ARBURST: output logic<2>         ,
+    M_AXI_ARLOCK : output logic<2>         ,
+    M_AXI_ARCACHE: output logic<4>         ,
+    M_AXI_ARPROT : output logic<3>         ,
+    M_AXI_ARQOS  : output logic<4>         ,
+    M_AXI_ARVALID: output logic            ,
+    M_AXI_ARREADY: input  logic            ,
+
+    // AXI Read Data
+    M_AXI_RID   : input  logic<AXI_ID_W>  ,
+    M_AXI_RDATA : input  logic<AXI_DATA_W>,
+    M_AXI_RRESP : input  logic<2>         ,
+    M_AXI_RLAST : input  logic            ,
+    M_AXI_RVALID: input  logic            ,
+    M_AXI_RREADY: output logic            ,
+
+    // debug
+    last_pc: output logic<32>,
+) {
+    enum State {
+        Idle,
+        Ar,
+        R,
+    }
+    var state    : State            ;
+    var pend_addr: logic<ADDR_WIDTH>;
+
+    assign mem_ready = run && (state == State::Idle);
+
+    always_ff {
+        if_reset {
+            state      = State::Idle;
+            pend_addr  = 0;
+            mem_rvalid = 0;
+            mem_rdata  = 0;
+            last_pc    = 0;
+        } else {
+            mem_rvalid = 1'b0; // 1-cycle pulse
+
+            case state {
+                State::Idle: {
+                    if mem_valid && mem_ready {
+                        pend_addr = mem_addr;
+                        last_pc   = mem_addr;
+                        state     = State::Ar;
+                    }
+                }
+                State::Ar: {
+                    if M_AXI_ARREADY {
+                        state = State::R;
+                    }
+                }
+                State::R: {
+                    if M_AXI_RVALID {
+                        mem_rdata  = M_AXI_RDATA[DATA_WIDTH - 1:0];
+                        mem_rvalid = 1'b1;
+                        state      = State::Idle;
+                    }
+                }
+                default: {
+                    state = State::Idle;
+                }
+            }
+        }
+    }
+
+    always_comb {
+        M_AXI_ARVALID = run && (state == State::Ar);
+        M_AXI_ARADDR  = dram_base + entry_pc + pend_addr;
+        M_AXI_ARLEN   = 8'd0;
+        M_AXI_ARSIZE  = 3'd2; // 4 bytes
+        M_AXI_ARBURST = 2'b01; // INCR
+        M_AXI_ARLOCK  = 2'b00;
+        M_AXI_ARCACHE = 4'b0000;
+        M_AXI_ARPROT  = 3'b000;
+        M_AXI_ARQOS   = 4'b0000;
+        M_AXI_ARID    = {1'b0 repeat AXI_ID_W};
+
+        M_AXI_RREADY = (state == State::R);
+    }
+}
