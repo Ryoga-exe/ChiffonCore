@@ -1,0 +1,37 @@
+import eei::*;
+import corectrl::*;
+
+module alu (
+    ctrl  : input  InstCtrl,
+    op1   : input  UIntX   ,
+    op2   : input  UIntX   ,
+    result: output UIntX   ,
+) {
+    let add: UIntX = op1 + op2;
+    let sub: UIntX = op1 - op2;
+
+    let sll: UIntX = op1 << op2[4:0];
+    let srl: UIntX = op1 >> op2[4:0];
+    let sra: SIntX = $signed(op1) >>> op2[4:0];
+
+    let slt : UIntX = {1'b0 repeat XLEN - 1, $signed(op1) <: $signed(op2)};
+    let sltu: UIntX = {1'b0 repeat XLEN - 1, op1 <: op2};
+
+    always_comb {
+        if ctrl.is_aluop {
+            result = case ctrl.funct3 {
+                3'b000 : if ctrl.itype == InstType::I | ctrl.funct7 == 0 ? add : sub,
+                3'b001 : sll,
+                3'b010 : slt,
+                3'b011 : sltu,
+                3'b100 : op1 ^ op2,
+                3'b101 : if ctrl.funct7[5] == 0 ? srl : sra,
+                3'b110 : op1 | op2,
+                3'b111 : op1 & op2,
+                default: 'x,
+            };
+        } else {
+            result = add;
+        }
+    }
+}
