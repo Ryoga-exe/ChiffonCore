@@ -1,4 +1,4 @@
-// tb_ifetch_basic.sv
+// tb_basic.sv
 `timescale 1ns / 1ps
 
 // VIP instance path (design_1 / axi_vip_0 は sim_ifetch.tcl の生成に合わせる)
@@ -7,7 +7,7 @@
 import axi_vip_pkg::*;
 import design_1_axi_vip_0_0_pkg::*;
 
-module tb_ifetch_basic;
+module tb_basic;
 
   localparam integer STEP = 8;
 
