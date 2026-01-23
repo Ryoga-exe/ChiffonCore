@@ -15,13 +15,14 @@ module membus_axi_master #(
     entry_pc : input logic<32>,
 
     // membus (plain wires; matches membus_if)
-    mem_valid : input  logic            ,
-    mem_ready : output logic            ,
-    mem_addr  : input  logic<ADDR_WIDTH>,
-    mem_wen   : input  logic            ,
-    mem_wdata : input  logic<DATA_WIDTH>,
-    mem_rvalid: output logic            ,
-    mem_rdata : output logic<DATA_WIDTH>,
+    mem_valid : input  logic                ,
+    mem_ready : output logic                ,
+    mem_addr  : input  logic<ADDR_WIDTH>    ,
+    mem_wen   : input  logic                ,
+    mem_wdata : input  logic<DATA_WIDTH>    ,
+    mem_wmask : input  logic<DATA_WIDTH / 8>,
+    mem_rvalid: output logic                ,
+    mem_rdata : output logic<DATA_WIDTH>    ,
 
     // AXI Write Address
     M_AXI_AWID   : output logic<AXI_ID_W>  ,
@@ -81,11 +82,13 @@ module membus_axi_master #(
         W,
         B,
     }
-    var state     : State            ;
-    var pend_addr : logic<ADDR_WIDTH>;
-    var pend_wdata: logic<DATA_WIDTH>;
-    var pend_wen  : logic            ;
+    var state     : State                ;
+    var pend_addr : logic<ADDR_WIDTH>    ;
+    var pend_wdata: logic<DATA_WIDTH>    ;
+    var pend_wmask: logic<DATA_WIDTH / 8>;
+    var pend_wen  : logic                ;
 
+    // Accept next request only when idle
     assign mem_ready = run && (state == State::Idle);
 
     always_ff {
@@ -93,7 +96,9 @@ module membus_axi_master #(
             state      = State::Idle;
             pend_addr  = 0;
             pend_wdata = 0;
+            pend_wmask = 0;
             pend_wen   = 0;
+
             mem_rvalid = 0;
             mem_rdata  = 0;
             last_pc    = 0;
@@ -105,6 +110,7 @@ module membus_axi_master #(
                     if mem_valid && mem_ready {
                         pend_addr  = mem_addr;
                         pend_wdata = mem_wdata;
+                        pend_wmask = mem_wmask;
                         pend_wen   = mem_wen;
                         last_pc    = mem_addr;
 
@@ -149,6 +155,8 @@ module membus_axi_master #(
         }
     }
 
+    let axi_addr: logic<AXI_ADDR_W> = (dram_base + entry_pc + pend_addr) & 32'hFFFF_FFFC;
+
     always_comb {
         // defaults
         M_AXI_ARVALID = 1'b0;
@@ -162,7 +170,7 @@ module membus_axi_master #(
         M_AXI_ARQOS   = 4'b0000;
         M_AXI_ARID    = {1'b0 repeat AXI_ID_W};
 
-        M_AXI_RREADY = 1'b0;
+        M_AXI_RREADY = 1'0;
 
         M_AXI_AWVALID = 1'b0;
         M_AXI_AWADDR  = 0;
@@ -186,7 +194,7 @@ module membus_axi_master #(
         if run {
             if state == State::Ar {
                 M_AXI_ARVALID = 1'b1;
-                M_AXI_ARADDR  = dram_base + entry_pc + pend_addr;
+                M_AXI_ARADDR  = axi_addr;
             }
             if state == State::R {
                 M_AXI_RREADY = 1'b1;
@@ -194,11 +202,12 @@ module membus_axi_master #(
 
             if state == State::Aw {
                 M_AXI_AWVALID = 1'b1;
-                M_AXI_AWADDR  = dram_base + entry_pc + pend_addr;
+                M_AXI_AWADDR  = axi_addr;
             }
             if state == State::W {
                 M_AXI_WVALID = 1'b1;
                 M_AXI_WDATA  = pend_wdata;
+                M_AXI_WSTRB  = pend_wmask;
             }
             if state == State::B {
                 M_AXI_BREADY = 1'b1;

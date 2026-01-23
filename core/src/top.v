@@ -143,6 +143,7 @@ module top #(
   wire [31:0] mem_addr;
   wire        mem_wen;
   wire [31:0] mem_wdata;
+  wire [ 3:0] mem_wmask;
   wire        mem_rvalid;
   wire [31:0] mem_rdata;
 
@@ -156,6 +157,7 @@ module top #(
       .mem_addr  (mem_addr),
       .mem_wen   (mem_wen),
       .mem_wdata (mem_wdata),
+      .mem_wmask (mem_wmask),
       .mem_rvalid(mem_rvalid),
       .mem_rdata (mem_rdata)
   );
@@ -181,6 +183,7 @@ module top #(
       .mem_addr  (mem_addr),
       .mem_wen   (mem_wen),
       .mem_wdata (mem_wdata),
+      .mem_wmask (mem_wmask),
       .mem_rvalid(mem_rvalid),
       .mem_rdata (mem_rdata),
 

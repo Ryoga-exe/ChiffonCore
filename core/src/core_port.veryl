@@ -7,13 +7,14 @@ module core_port (
     clk: input clock,
     rst: input reset,
 
-    mem_valid : output logic      ,
-    mem_ready : input  logic      ,
-    mem_addr  : output logic<XLEN>,
-    mem_wen   : output logic      ,
-    mem_wdata : output logic<ILEN>,
-    mem_rvalid: input  logic      ,
-    mem_rdata : input  logic<ILEN>,
+    mem_valid : output logic          ,
+    mem_ready : input  logic          ,
+    mem_addr  : output logic<XLEN>    ,
+    mem_wen   : output logic          ,
+    mem_wdata : output logic<ILEN>    ,
+    mem_wmask : output logic<ILEN / 8>,
+    mem_rvalid: input  logic          ,
+    mem_rdata : input  logic<ILEN>    ,
 ) {
     inst i_membus: membus_if::<ILEN, XLEN>; // for instruction fetch
     inst d_membus: membus_if::<MEM_DATA_WIDTH, XLEN>; // for load/store
@@ -47,10 +48,12 @@ module core_port (
             mem_addr  = d_membus.addr;
             mem_wen   = d_membus.wen;
             mem_wdata = d_membus.wdata;
+            mem_wmask = d_membus.wmask;
         } else {
             mem_addr  = i_membus.addr;
             mem_wen   = 0; // fetch always
             mem_wdata = 'x;
+            mem_wmask = 'x;
         }
     }
 
