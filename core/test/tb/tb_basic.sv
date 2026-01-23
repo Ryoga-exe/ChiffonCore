@@ -11,6 +11,8 @@ module tb_basic;
 
   localparam integer STEP = 8;
 
+  localparam string MEMMDATA = "sample.hex";
+
   // DUT ports (design_1_wrapper のポートに合わせる)
   logic        ACLK;
   logic        ARESETN;
@@ -174,7 +176,7 @@ module tb_basic;
     init_system();
 
     // Write hex to memory
-    load_hex_file("sample.hex", MEMBASE);
+    load_hex_file(MEMDATA, MEMBASE);
 
     // ------------------------------------------------------------
     // 2) Set BOOTCTRL (dram_base / entry_pc / START)
