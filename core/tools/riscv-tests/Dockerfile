@@ -1,37 +1,91 @@
-FROM ubuntu:24.04
+############################
+# builder
+############################
+FROM ubuntu:24.04 AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 
-# ---- deps ----
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git ca-certificates curl \
-    autoconf automake autotools-dev libtool gawk patchutils \
-    python3 \
-    build-essential bison flex texinfo gperf bc \
-    libmpc-dev libmpfr-dev libgmp-dev zlib1g-dev libexpat-dev \
- && rm -rf /var/lib/apt/lists/*
+# Install prefix
+ARG RISCV=/opt/riscv
+
+ARG RISCV_GNU_TOOLCHAIN_REF=master
+ARG RISCV_TESTS_REF=master
+
+ENV RISCV="${RISCV}"
+ENV PATH="${RISCV}/bin:${PATH}"
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# Build dependencies
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      git ca-certificates curl \
+      autoconf automake autotools-dev libtool gawk patchutils \
+      python3 perl \
+      build-essential bison flex texinfo gperf bc \
+      libmpc-dev libmpfr-dev libgmp-dev zlib1g-dev libexpat-dev; \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp
 
 # ---- riscv-gnu-toolchain (multilib) ----
-# ここは "将来RV64も" を見越して multilib を有効にしておく（rv32/rv64 を -march/-mabi で切替可能）
-ENV RISCV=/opt/riscv
-ENV PATH=${RISCV}/bin:${PATH}
+RUN set -eux; \
+    git clone --recursive --depth 1 --shallow-submodules \
+      --branch "${RISCV_GNU_TOOLCHAIN_REF}" \
+      https://github.com/riscv-collab/riscv-gnu-toolchain riscv-gnu-toolchain; \
+    cd riscv-gnu-toolchain; \
+    ./configure --prefix="${RISCV}" --enable-multilib; \
+    make -j"$(nproc)"; \
+    cd /; rm -rf /tmp/riscv-gnu-toolchain
 
-RUN git clone --recursive https://github.com/riscv-collab/riscv-gnu-toolchain /tmp/riscv-gnu-toolchain \
- && cd /tmp/riscv-gnu-toolchain \
- && ./configure --prefix=${RISCV} --enable-multilib \
- && make -j"$(nproc)" \
- && rm -rf /tmp/riscv-gnu-toolchain
+# ---- IMPORTANT: riscv32-unknown-elf-* を生やす
+RUN set -eux; \
+    for tool in gcc g++ as ld objcopy objdump ar ranlib nm strip size readelf; do \
+      if [ -x "${RISCV}/bin/riscv64-unknown-elf-${tool}" ]; then \
+        ln -sf "riscv64-unknown-elf-${tool}" "${RISCV}/bin/riscv32-unknown-elf-${tool}"; \
+      fi; \
+    done
 
 # ---- riscv-tests build (RV32, env/p, start=0x0) ----
 RUN set -eux; \
-  git clone https://github.com/riscv-software-src/riscv-tests /opt/riscv-tests; \
-  cd /opt/riscv-tests; \
-  git submodule update --init --recursive; \
-  autoconf; \
-  ./configure --prefix=/opt/riscv-tests-install; \
-  # env/p/link.ld の先頭を 0x00000000 にする
-  sed -i -E 's/^[[:space:]]*\.[[:space:]]*=[[:space:]]*0x[0-9a-fA-F]+[[:space:]]*;/  . = 0x00000000;/' env/p/link.ld; \
-  make -j"$(nproc)" XLEN=32 RISCV_PREFIX=riscv64-unknown-elf-; \
-  make XLEN=32 RISCV_PREFIX=riscv64-unknown-elf- install
+    git clone --recursive --depth 1 --shallow-submodules \
+      --branch "${RISCV_TESTS_REF}" \
+      https://github.com/riscv-software-src/riscv-tests /tmp/riscv-tests; \
+    cd /tmp/riscv-tests; \
+    # env/p/link.ld の先頭を 0x00000000 にする
+    perl -0777 -i -pe 's/\.\s*=\s*0x[0-9a-fA-F_]+\s*;/\. = 0x00000000;/m' env/p/link.ld; \
+    # configure/autoconf/install-* に依存しない。isa だけを確実に作る
+    make -C isa clean; \
+    make -C isa -j"$(nproc)" XLEN=32 RISCV_PREFIX=riscv32-unknown-elf-; \
+    # install-isa の代わりに成果物を手で配置（版差に強い）
+    install -d /opt/riscv-tests-install/share/riscv-tests/isa; \
+    cp -a isa/rv32ui-p-* /opt/riscv-tests-install/share/riscv-tests/isa/; \
+    cp -a isa/rv32mi-p-* /opt/riscv-tests-install/share/riscv-tests/isa/; \
+    cd /; rm -rf /tmp/riscv-tests
+
+############################
+# runtime
+############################
+FROM ubuntu:24.04 AS runtime
+ARG DEBIAN_FRONTEND=noninteractive
+ARG RISCV=/opt/riscv
+
+ENV RISCV="${RISCV}"
+ENV PATH="${RISCV}/bin:${PATH}"
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      python3; \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/riscv /opt/riscv
+COPY --from=builder /opt/riscv-tests-install /opt/riscv-tests-install
 
 # tools
 COPY bin2hex.py /usr/local/bin/bin2hex.py
