@@ -171,7 +171,7 @@ module top #(
       .AXI_ID_W  (C_M_AXI_THREAD_ID_WIDTH),
       .AXI_ADDR_W(C_M_AXI_ADDR_WIDTH),
       .AXI_DATA_W(C_M_AXI_DATA_WIDTH)
-  ) u_ifetch (
+  ) u_membus_axi_master (
       .clk      (ACLK),
       .rst      (CORE_RST),
       .run      (boot_run),
