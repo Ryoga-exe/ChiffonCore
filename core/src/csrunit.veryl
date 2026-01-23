@@ -1,0 +1,16 @@
+import eei::*;
+import corectrl::*;
+
+/// CSR module
+module csrunit (
+    clk     : input  clock       ,
+    rst     : input  reset       ,
+    valid   : input  logic       , /// Whether a command/instruction is being supplied
+    ctrl    : input  InstCtrl    , /// The instruction's `InstCtrl`
+    csr_addr: input  logic   <12>, /// CSR address specified by the instruction (upper 12 bits of the instruction)
+    rs1     : input  UIntX       , /// `rs1` when CSRR(W|S|C), the immediate (5 bits) zero-extended when CSRR(W|S|C)I
+    rdata   : output UIntX       , /// Result of reading the CSR by the CSR instruction
+) {
+    // CSRR(W|S|C)[I] inst?
+    let is_wsc: logic = ctrl.is_csr && ctrl.funct3[1:0] != 0;
+}

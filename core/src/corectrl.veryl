@@ -20,6 +20,7 @@ package corectrl {
         is_aluop: logic      , // use ALU?
         is_jump : logic      , // is jump inst?
         is_load : logic      , // is load inst?
+        is_csr  : logic      , // is CSR inst?
         funct3  : logic   <3>, // funct3 field in inst
         funct7  : logic   <7>, // funct7 field in inst
     }
