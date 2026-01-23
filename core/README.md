@@ -20,6 +20,12 @@ make build
 make simulation
 ```
 
+## Create riscv-tests hex
+
+```shell
+make riscv-tests
+```
+
 ## Cleaning up
 
 ```shell
