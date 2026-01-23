@@ -95,6 +95,11 @@ COPY --from=builder ${RISCV_TESTS_INSTALL} ${RISCV_TESTS_INSTALL}
 # tools
 COPY bin2hex.py /usr/local/bin/bin2hex.py
 COPY export_riscv_tests.sh /usr/local/bin/export_riscv_tests.sh
+
+# on Windows (CRLF -> LF)
+RUN sed -i 's/\r$//' /usr/local/bin/bin2hex.py /usr/local/bin/export_riscv_tests.sh \
+ && chmod +x /usr/local/bin/export_riscv_tests.sh
+
 RUN chmod +x /usr/local/bin/export_riscv_tests.sh
 
 WORKDIR /work
