@@ -1,6 +1,7 @@
 import eei::*;
 
 package corectrl {
+    /// Representing instruction formats
     enum InstType: logic<6> {
         X = 6'b000000,
         R = 6'b000001,
@@ -11,6 +12,7 @@ package corectrl {
         J = 6'b100000,
     }
 
+    /// Struct for flags and used for control
     struct InstCtrl {
         itype   : InstType   , // type of operation
         rwb_en  : logic      , // write registers?
@@ -20,5 +22,19 @@ package corectrl {
         is_load : logic      , // is load inst?
         funct3  : logic   <3>, // funct3 field in inst
         funct7  : logic   <7>, // funct7 field in inst
+    }
+
+    /// Determines whether an instruction accesses memory
+    function inst_is_memop (
+        ctrl: input InstCtrl,
+    ) -> logic {
+        return ctrl.itype == InstType::S || ctrl.is_load;
+    }
+
+    /// Determines whether an instruction is a store operation
+    function inst_is_store (
+        ctrl: input InstCtrl,
+    ) -> logic {
+        return inst_is_memop(ctrl) && !ctrl.is_load;
     }
 }

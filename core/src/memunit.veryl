@@ -1,0 +1,71 @@
+import eei::*;
+import corectrl::*;
+
+/// Module that performs memory operations
+module memunit (
+    clk   : input   clock                                    ,
+    rst   : input   reset                                    ,
+    valid : input   logic                                    ,
+    is_new: input   logic                                    , // Whether a new instruction is supplied
+    ctrl  : input   InstCtrl                                 , // InstCtrl of the instruction
+    addr  : input   Addr                                     , // Address to access
+    rs2   : input   UIntX                                    , // Data to write for store instruction
+    rdata : output  UIntX                                    , // Load instruction result (valid when stall == 0)
+    stall : output  logic                                    , // Memory access instruction not completed
+    membus: modport membus_if::<MEM_DATA_WIDTH, XLEN>::master, // Interface with memory
+) {
+    enum State: logic<2> {
+        Init, // accepts commands
+        WaitReady, // waiting for memory to become operable
+        WaitValid, // waiting for memory operation to complete
+    }
+    var state: State;
+
+    var req_wen  : logic                ;
+    var req_addr : Addr                 ;
+    var req_wdata: logic<MEM_DATA_WIDTH>;
+
+    always_comb {
+        // memory access
+        membus.valid = (state == State::WaitReady);
+        membus.addr  = req_addr;
+        membus.wen   = req_wen;
+        membus.wdata = req_wdata;
+        rdata        = membus.rdata; // result of load
+        stall        = valid & case state {
+            State::Init     : is_new && inst_is_memop(ctrl),
+            State::WaitReady: 1,
+            State::WaitValid: !membus.rvalid,
+            default         : 0,
+        };
+    }
+
+    always_ff {
+        if_reset {
+            state     = State::Init;
+            req_wen   = 0;
+            req_addr  = 0;
+            req_wdata = 0;
+        } else {
+            if !valid {
+                state = State::Init;
+            } else {
+                case state {
+                    State::Init: if is_new & inst_is_memop(ctrl) {
+                        state     = State::WaitReady;
+                        req_wen   = inst_is_store(ctrl);
+                        req_addr  = addr;
+                        req_wdata = rs2;
+                    }
+                    State::WaitReady: if membus.ready {
+                        state = State::WaitValid;
+                    }
+                    State::WaitValid: if membus.rvalid {
+                        state = State::Init;
+                    }
+                    default: {}
+                }
+            }
+        }
+    }
+}
