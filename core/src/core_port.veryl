@@ -33,17 +33,6 @@ module core_port (
     // core drives: bus.valid/addr/wen/wdata
     // outside drives: bus.ready/rvalid/rdata
     always_comb {
-        mem_valid = i_membus.valid;
-        mem_addr  = i_membus.addr;
-        mem_wen   = i_membus.wen;
-        mem_wdata = i_membus.wdata;
-
-        i_membus.ready  = mem_ready;
-        i_membus.rvalid = mem_rvalid;
-        i_membus.rdata  = mem_rdata;
-    }
-
-    always_comb {
         i_membus.ready  = mem_ready && !d_membus.valid;
         i_membus.rvalid = mem_rvalid && memarb_last_i;
         i_membus.rdata  = mem_rdata;
