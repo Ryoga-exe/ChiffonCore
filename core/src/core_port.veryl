@@ -1,0 +1,38 @@
+/// core_port
+/// Wrapper around `core` that exposes membus as plain signals.
+/// This lets a Verilog top (top.v) instantiate the CPU without using SV interfaces in the top.
+import eei::*;
+
+module core_port (
+    clk: input clock,
+    rst: input reset,
+
+    mem_valid : output logic      ,
+    mem_ready : input  logic      ,
+    mem_addr  : output logic<XLEN>,
+    mem_wen   : output logic      ,
+    mem_wdata : output logic<ILEN>,
+    mem_rvalid: input  logic      ,
+    mem_rdata : input  logic<ILEN>,
+) {
+    inst bus: membus_if::<ILEN, XLEN>;
+
+    // core drives: bus.valid/addr/wen/wdata
+    // outside drives: bus.ready/rvalid/rdata
+    always_comb {
+        mem_valid = bus.valid;
+        mem_addr  = bus.addr;
+        mem_wen   = bus.wen;
+        mem_wdata = bus.wdata;
+
+        bus.ready  = mem_ready;
+        bus.rvalid = mem_rvalid;
+        bus.rdata  = mem_rdata;
+    }
+
+    inst u_core: core (
+        clk        ,
+        rst        ,
+        membus: bus,
+    );
+}
