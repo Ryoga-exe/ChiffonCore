@@ -60,7 +60,7 @@ module tb_basic;
   // ----------------------------------------------------------------
   // regbus helpers
   // ----------------------------------------------------------------
-  task write_reg(input [15:0] addr, input [3:0] byteen, input [31:0] wdata);
+  task automatic write_reg(input [15:0] addr, input [3:0] byteen, input [31:0] wdata);
     begin
       WRADDR = addr;
       BYTEEN = byteen;
@@ -72,7 +72,7 @@ module tb_basic;
     end
   endtask
 
-  task read_reg(input [15:0] addr, output [31:0] rdata);
+  task automatic read_reg(input [15:0] addr, output [31:0] rdata);
     begin
       RDADDR = addr;
       @(negedge ACLK);
@@ -86,7 +86,7 @@ module tb_basic;
   // ----------------------------------------------------------------
   // VIP ready behavior (ARREADY のみ設定すれば ifetch は進む)
   // ----------------------------------------------------------------
-  task user_gen_arready();
+  task automatic user_gen_arready();
     axi_ready_gen arready_gen;
     begin
       arready_gen = agent.wr_driver.create_ready("arready");
@@ -98,14 +98,14 @@ module tb_basic;
   // ----------------------------------------------------------------
   // Memory helpers
   // ----------------------------------------------------------------
-  task memwrite32(input [31:0] addr, input [31:0] data);
+  task automatic memwrite32(input [31:0] addr, input [31:0] data);
     begin
       agent.mem_model.backdoor_memory_write_4byte(addr, data, 4'hf);
     end
   endtask
 
   // Simple Hex loader: read 32-bit word per line
-  task load_hex_file(input string filename, input [31:0] base_addr);
+  task automatic load_hex_file(input string filename, input [31:0] base_addr);
     integer        fd;
     integer        rc;
     int            idx;
@@ -139,7 +139,7 @@ module tb_basic;
   // ----------------------------------------------------------------
   // System init
   // ----------------------------------------------------------------
-  task init_system();
+  task automatic init_system();
     begin
       agent = new("AXI Slave Agent", `VIPINST.IF);
       agent.start_slave();
