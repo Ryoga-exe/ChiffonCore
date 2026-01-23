@@ -1,5 +1,6 @@
 VERYL = veryl
 VIVADO = vivado
+DOCKER = docker
 
 ifeq ($(OS),Windows_NT)
 	# required bmatzelle.Gow
@@ -34,3 +35,8 @@ clean:
 	rm -rf target
 	rm -rf project .Xil *.jou *.log
 	rm -rf simulation
+
+.PHONY: riscv-tests
+riscv-tests:
+	$(DOCKER) build -t chiffon-riscv-tests -f tools/riscv-tests/Dockerfile tools/riscv-tests
+	$(DOCKER) run --rm -v "$PWD:/work" chiffon-riscv-tests
