@@ -45,14 +45,14 @@ module tb_basic;
   // ----------------------------------------------------------------
   // BOOTCTRL register map (bootctrl_regbus.veryl の BOOT_BASE=0x1000 に合わせる)
   // ----------------------------------------------------------------
-  localparam [15:0] BOOT_BASE = 16'h1000;
-  localparam [15:0] BOOT_STATUS = BOOT_BASE + 16'h0000;
-  localparam [15:0] BOOT_CTRL = BOOT_BASE + 16'h0004;
-  localparam [15:0] BOOT_DRAMBASE = BOOT_BASE + 16'h0008;
-  localparam [15:0] BOOT_ENTRYPC = BOOT_BASE + 16'h000C;
+  localparam logic [15:0] BOOT_BASE = 16'h1000;
+  localparam logic [15:0] BOOT_STATUS = BOOT_BASE + 16'h0000;
+  localparam logic [15:0] BOOT_CTRL = BOOT_BASE + 16'h0004;
+  localparam logic [15:0] BOOT_DRAMBASE = BOOT_BASE + 16'h0008;
+  localparam logic [15:0] BOOT_ENTRYPC = BOOT_BASE + 16'h000C;
 
   // Instruction memory base used by VIP backdoor (任意。draw と合わせて 0x2000_0000 にしておく)
-  localparam [31:0] MEMBASE = 32'h2000_0000;
+  localparam logic [31:0] MEMBASE = 32'h2000_0000;
 
   // VIP Slave agent (slv_mem)
   design_1_axi_vip_0_0_slv_mem_t agent;
