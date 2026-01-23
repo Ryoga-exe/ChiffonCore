@@ -104,6 +104,12 @@ module top #(
   //-------------------------------------------------------------------------
   // BOOTCTRL (regbus)
   //-------------------------------------------------------------------------
+  wire [31:0] boot_rdata;
+  wire        boot_run;
+  wire        boot_hold_reset;
+  wire [31:0] boot_dram_base;
+  wire [31:0] boot_entry_pc;
+
   bootctrl_regbus #(
       .BOOT_BASE(16'h1000)
   ) u_bootctrl (
