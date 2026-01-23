@@ -22,16 +22,16 @@ RUN git clone --recursive https://github.com/riscv-collab/riscv-gnu-toolchain /t
  && rm -rf /tmp/riscv-gnu-toolchain
 
 # ---- riscv-tests build (RV32, env/p, start=0x0) ----
-RUN git clone https://github.com/riscv-software-src/riscv-tests /opt/riscv-tests \
- && cd /opt/riscv-tests \
- && git submodule update --init --recursive \
- && autoconf \
- && ./configure --prefix=/opt/riscv-tests-install \
- # env/p/link.ld の先頭を 0x00000000 にする
- && sed -i -E 's/^[[:space:]]*\.[[:space:]]*=[[:space:]]*0x[0-9a-fA-F]+[[:space:]]*;/  . = 0x00000000;/' env/p/link.ld \
- # toolchain prefix を riscv64 に
- && make -j"$(nproc)" XLEN=32 RISCV_PREFIX=riscv64-unknown-elf- isa \
- && make XLEN=32 RISCV_PREFIX=riscv64-unknown-elf- install-isa
+RUN set -eux; \
+  git clone https://github.com/riscv-software-src/riscv-tests /opt/riscv-tests; \
+  cd /opt/riscv-tests; \
+  git submodule update --init --recursive; \
+  autoconf; \
+  ./configure --prefix=/opt/riscv-tests-install; \
+  # env/p/link.ld の先頭を 0x00000000 にする
+  sed -i -E 's/^[[:space:]]*\.[[:space:]]*=[[:space:]]*0x[0-9a-fA-F]+[[:space:]]*;/  . = 0x00000000;/' env/p/link.ld; \
+  make -j"$(nproc)" XLEN=32 RISCV_PREFIX=riscv64-unknown-elf-; \
+  make XLEN=32 RISCV_PREFIX=riscv64-unknown-elf- install
 
 # tools
 COPY bin2hex.py /usr/local/bin/bin2hex.py
