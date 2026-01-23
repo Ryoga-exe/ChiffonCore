@@ -85,6 +85,9 @@ generate_target all [get_files ${design_name}.bd]
 set wrapper_file [make_wrapper -files [get_files ${design_name}.bd] -top]
 add_files -norecurse $wrapper_file
 
+# Set design_1_wrapper as Top
+set_property top design_1_wrapper [get_filesets sources_1]
+
 update_compile_order -fileset sources_1
 update_compile_order -fileset sim_1
 
