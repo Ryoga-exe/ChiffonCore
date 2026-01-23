@@ -12,4 +12,3 @@ omit_project_prefix = true
 implicit_parameter_types = ["string"]
 expand_inside_operation = true
 sourcemap_target = { type = "directory", path = "target/sourcemap" }
-
