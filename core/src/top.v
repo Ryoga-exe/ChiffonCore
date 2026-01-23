@@ -161,11 +161,11 @@ module top #(
   );
 
   //-------------------------------------------------------------------------
-  // IFetch membus -> AXI read adapter
+  // membus -> AXI adapter
   //-------------------------------------------------------------------------
   wire [31:0] last_pc;
 
-  ifetch_axi_read #(
+  membus_axi_master #(
       .AXI_ID_W  (C_M_AXI_THREAD_ID_WIDTH),
       .AXI_ADDR_W(C_M_AXI_ADDR_WIDTH),
       .AXI_DATA_W(C_M_AXI_DATA_WIDTH)

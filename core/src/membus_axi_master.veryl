@@ -1,4 +1,4 @@
-module ifetch_axi_read #(
+module membus_axi_master #(
     param AXI_ID_W  : u32 = 1 ,
     param AXI_ADDR_W: u32 = 32,
     param AXI_DATA_W: u32 = 32,
