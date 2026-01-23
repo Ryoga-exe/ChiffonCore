@@ -60,7 +60,8 @@ module tb_basic;
   // ----------------------------------------------------------------
   // regbus helpers
   // ----------------------------------------------------------------
-  task automatic write_reg(input [15:0] addr, input [3:0] byteen, input [31:0] wdata);
+  task automatic write_reg(input logic [15:0] addr, input logic [3:0] byteen,
+                           input logic [31:0] wdata);
     begin
       WRADDR = addr;
       BYTEEN = byteen;
@@ -72,7 +73,7 @@ module tb_basic;
     end
   endtask
 
-  task automatic read_reg(input [15:0] addr, output [31:0] rdata);
+  task automatic read_reg(input logic [15:0] addr, output logic [31:0] rdata);
     begin
       RDADDR = addr;
       @(negedge ACLK);
@@ -98,14 +99,14 @@ module tb_basic;
   // ----------------------------------------------------------------
   // Memory helpers
   // ----------------------------------------------------------------
-  task automatic memwrite32(input [31:0] addr, input [31:0] data);
+  task automatic memwrite32(input logic [31:0] addr, input logic [31:0] data);
     begin
       agent.mem_model.backdoor_memory_write_4byte(addr, data, 4'hf);
     end
   endtask
 
   // Simple Hex loader: read 32-bit word per line
-  task automatic load_hex_file(input string filename, input [31:0] base_addr);
+  task automatic load_hex_file(input string filename, input logic [31:0] base_addr);
     integer        fd;
     integer        rc;
     int            idx;
