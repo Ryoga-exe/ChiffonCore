@@ -184,6 +184,29 @@ module top #(
       .mem_rvalid(mem_rvalid),
       .mem_rdata (mem_rdata),
 
+      .M_AXI_AWID   (M_AXI_AWID),
+      .M_AXI_AWADDR (M_AXI_AWADDR),
+      .M_AXI_AWLEN  (M_AXI_AWLEN),
+      .M_AXI_AWSIZE (M_AXI_AWSIZE),
+      .M_AXI_AWBURST(M_AXI_AWBURST),
+      .M_AXI_AWLOCK (M_AXI_AWLOCK),
+      .M_AXI_AWCACHE(M_AXI_AWCACHE),
+      .M_AXI_AWPROT (M_AXI_AWPROT),
+      .M_AXI_AWQOS  (M_AXI_AWQOS),
+      .M_AXI_AWVALID(M_AXI_AWVALID),
+      .M_AXI_AWREADY(M_AXI_AWREADY),
+
+      .M_AXI_WDATA (M_AXI_WDATA),
+      .M_AXI_WSTRB (M_AXI_WSTRB),
+      .M_AXI_WLAST (M_AXI_WLAST),
+      .M_AXI_WVALID(M_AXI_WVALID),
+      .M_AXI_WREADY(M_AXI_WREADY),
+
+      .M_AXI_BID   (M_AXI_BID),
+      .M_AXI_BRESP (M_AXI_BRESP),
+      .M_AXI_BVALID(M_AXI_BVALID),
+      .M_AXI_BREADY(M_AXI_BREADY),
+
       .M_AXI_ARID   (M_AXI_ARID),
       .M_AXI_ARADDR (M_AXI_ARADDR),
       .M_AXI_ARLEN  (M_AXI_ARLEN),
@@ -209,27 +232,11 @@ module top #(
   assign DEBUG = last_pc;
 
   //-------------------------------------------------------------------------
-  // AXI write channel is unused for now (tie off)
+  // AXI user fields are unused for now (tie to 0)
   //-------------------------------------------------------------------------
-  assign M_AXI_AWID    = {C_M_AXI_THREAD_ID_WIDTH{1'b0}};
-  assign M_AXI_AWADDR  = {C_M_AXI_ADDR_WIDTH{1'b0}};
-  assign M_AXI_AWLEN   = 8'd0;
-  assign M_AXI_AWSIZE  = 3'd0;
-  assign M_AXI_AWBURST = 2'd0;
-  assign M_AXI_AWLOCK  = 2'd0;
-  assign M_AXI_AWCACHE = 4'd0;
-  assign M_AXI_AWPROT  = 3'd0;
-  assign M_AXI_AWQOS   = 4'd0;
-  assign M_AXI_AWUSER  = {C_M_AXI_AWUSER_WIDTH{1'b0}};
-  assign M_AXI_AWVALID = 1'b0;
-
-  assign M_AXI_WDATA   = {C_M_AXI_DATA_WIDTH{1'b0}};
-  assign M_AXI_WSTRB   = {C_M_AXI_DATA_WIDTH/8{1'b0}};
-  assign M_AXI_WLAST   = 1'b0;
-  assign M_AXI_WUSER   = {C_M_AXI_WUSER_WIDTH{1'b0}};
-  assign M_AXI_WVALID  = 1'b0;
-
-  assign M_AXI_BREADY  = 1'b1;
+  assign M_AXI_AWUSER = {C_M_AXI_AWUSER_WIDTH{1'b0}};
+  assign M_AXI_WUSER = {C_M_AXI_WUSER_WIDTH{1'b0}};
+  assign M_AXI_ARUSER = {C_M_AXI_ARUSER_WIDTH{1'b0}};
 
   // UART idle
   assign UART_TX = 1'b1;

@@ -23,6 +23,32 @@ module ifetch_axi_read #(
     mem_rvalid: output logic            ,
     mem_rdata : output logic<DATA_WIDTH>,
 
+    // AXI Write Address
+    M_AXI_AWID   : output logic<AXI_ID_W>  ,
+    M_AXI_AWADDR : output logic<AXI_ADDR_W>,
+    M_AXI_AWLEN  : output logic<8>         ,
+    M_AXI_AWSIZE : output logic<3>         ,
+    M_AXI_AWBURST: output logic<2>         ,
+    M_AXI_AWLOCK : output logic<2>         ,
+    M_AXI_AWCACHE: output logic<4>         ,
+    M_AXI_AWPROT : output logic<3>         ,
+    M_AXI_AWQOS  : output logic<4>         ,
+    M_AXI_AWVALID: output logic            ,
+    M_AXI_AWREADY: input  logic            ,
+
+    // AXI Write Data
+    M_AXI_WDATA : output logic<AXI_DATA_W>      ,
+    M_AXI_WSTRB : output logic<(AXI_DATA_W / 8)>,
+    M_AXI_WLAST : output logic                  ,
+    M_AXI_WVALID: output logic                  ,
+    M_AXI_WREADY: input  logic                  ,
+
+    // --------------- AXI Write Response ----------------
+    M_AXI_BID   : input  logic<AXI_ID_W>,
+    M_AXI_BRESP : input  logic<2>       ,
+    M_AXI_BVALID: input  logic          ,
+    M_AXI_BREADY: output logic          ,
+
     // AXI Read Address
     M_AXI_ARID   : output logic<AXI_ID_W>  ,
     M_AXI_ARADDR : output logic<AXI_ADDR_W>,
@@ -51,9 +77,14 @@ module ifetch_axi_read #(
         Idle,
         Ar,
         R,
+        Aw,
+        W,
+        B,
     }
-    var state    : State            ;
-    var pend_addr: logic<ADDR_WIDTH>;
+    var state     : State            ;
+    var pend_addr : logic<ADDR_WIDTH>;
+    var pend_wdata: logic<DATA_WIDTH>;
+    var pend_wen  : logic            ;
 
     assign mem_ready = run && (state == State::Idle);
 
@@ -61,6 +92,8 @@ module ifetch_axi_read #(
         if_reset {
             state      = State::Idle;
             pend_addr  = 0;
+            pend_wdata = 0;
+            pend_wen   = 0;
             mem_rvalid = 0;
             mem_rdata  = 0;
             last_pc    = 0;
@@ -70,11 +103,15 @@ module ifetch_axi_read #(
             case state {
                 State::Idle: {
                     if mem_valid && mem_ready {
-                        pend_addr = mem_addr;
-                        last_pc   = mem_addr;
-                        state     = State::Ar;
+                        pend_addr  = mem_addr;
+                        pend_wdata = mem_wdata;
+                        pend_wen   = mem_wen;
+                        last_pc    = mem_addr;
+
+                        state = if mem_wen ? State::Aw : State::Ar;
                     }
                 }
+                // ---------- Read ----------
                 State::Ar: {
                     if M_AXI_ARREADY {
                         state = State::R;
@@ -87,6 +124,24 @@ module ifetch_axi_read #(
                         state      = State::Idle;
                     }
                 }
+                // ---------- Write ----------
+                State::Aw: {
+                    if M_AXI_AWREADY {
+                        state = State::W;
+                    }
+                }
+                State::W: {
+                    if M_AXI_WREADY {
+                        state = State::B;
+                    }
+                }
+                State::B: {
+                    if M_AXI_BVALID {
+                        // store completion pulse (no rdata)
+                        mem_rvalid = 1'b1;
+                        state      = State::Idle;
+                    }
+                }
                 default: {
                     state = State::Idle;
                 }
@@ -95,8 +150,9 @@ module ifetch_axi_read #(
     }
 
     always_comb {
-        M_AXI_ARVALID = run && (state == State::Ar);
-        M_AXI_ARADDR  = dram_base + entry_pc + pend_addr;
+        // defaults
+        M_AXI_ARVALID = 1'b0;
+        M_AXI_ARADDR  = 0;
         M_AXI_ARLEN   = 8'd0;
         M_AXI_ARSIZE  = 3'd2; // 4 bytes
         M_AXI_ARBURST = 2'b01; // INCR
@@ -106,6 +162,47 @@ module ifetch_axi_read #(
         M_AXI_ARQOS   = 4'b0000;
         M_AXI_ARID    = {1'b0 repeat AXI_ID_W};
 
-        M_AXI_RREADY = (state == State::R);
+        M_AXI_RREADY = 1'b0;
+
+        M_AXI_AWVALID = 1'b0;
+        M_AXI_AWADDR  = 0;
+        M_AXI_AWLEN   = 8'd0;
+        M_AXI_AWSIZE  = 3'd2; // 4 bytes
+        M_AXI_AWBURST = 2'b01; // INCR
+        M_AXI_AWLOCK  = 2'b00;
+        M_AXI_AWCACHE = 4'b0000;
+        M_AXI_AWPROT  = 3'b000;
+        M_AXI_AWQOS   = 4'b0000;
+        M_AXI_AWID    = {1'b0 repeat AXI_ID_W};
+
+        M_AXI_WVALID = 1'b0;
+        M_AXI_WDATA  = 0;
+        M_AXI_WSTRB  = {1'b1 repeat (AXI_DATA_W / 8)}; // word store only (SW) for now
+        M_AXI_WLAST  = 1'b1;
+
+        M_AXI_BREADY = 1'b0;
+
+        // active behavior
+        if run {
+            if state == State::Ar {
+                M_AXI_ARVALID = 1'b1;
+                M_AXI_ARADDR  = dram_base + entry_pc + pend_addr;
+            }
+            if state == State::R {
+                M_AXI_RREADY = 1'b1;
+            }
+
+            if state == State::Aw {
+                M_AXI_AWVALID = 1'b1;
+                M_AXI_AWADDR  = dram_base + entry_pc + pend_addr;
+            }
+            if state == State::W {
+                M_AXI_WVALID = 1'b1;
+                M_AXI_WDATA  = pend_wdata;
+            }
+            if state == State::B {
+                M_AXI_BREADY = 1'b1;
+            }
+        }
     }
 }
