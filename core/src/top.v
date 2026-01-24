@@ -1,7 +1,7 @@
 module top #(
     parameter integer C_M_AXI_THREAD_ID_WIDTH = 1,
     parameter integer C_M_AXI_ADDR_WIDTH      = 32,
-    parameter integer C_M_AXI_DATA_WIDTH      = 32,
+    parameter integer C_M_AXI_DATA_WIDTH      = 64,
     parameter integer C_M_AXI_AWUSER_WIDTH    = 1,
     parameter integer C_M_AXI_ARUSER_WIDTH    = 1,
     parameter integer C_M_AXI_WUSER_WIDTH     = 4,   // Avoid Warning
@@ -142,10 +142,10 @@ module top #(
   wire        mem_ready;
   wire [31:0] mem_addr;
   wire        mem_wen;
-  wire [31:0] mem_wdata;
-  wire [ 3:0] mem_wmask;
+  wire [63:0] mem_wdata;
+  wire [ 7:0] mem_wmask;
   wire        mem_rvalid;
-  wire [31:0] mem_rdata;
+  wire [63:0] mem_rdata;
 
   // NOTE: `core_port` is provided as Veryl wrapper (core_port.veryl).
   // It exposes the membus signals as plain ports (no SV interface on top-level).

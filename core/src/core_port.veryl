@@ -9,7 +9,7 @@ module core_port (
 
     mem_valid : output logic                    ,
     mem_ready : input  logic                    ,
-    mem_addr  : output logic<MEM_ADDR_WIDTH>    ,
+    mem_addr  : output logic<32>                , // NOTE: consider: use MEM_ADDR_WIDTH (but 20)
     mem_wen   : output logic                    ,
     mem_wdata : output logic<MEM_DATA_WIDTH>    ,
     mem_wmask : output logic<MEM_DATA_WIDTH / 8>,
