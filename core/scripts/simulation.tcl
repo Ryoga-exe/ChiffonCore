@@ -46,10 +46,21 @@ set DEBUG  [create_bd_port -dir O -from 31 -to 0 DEBUG]
 set axi_vip_0 [create_bd_cell -type ip -vlnv xilinx.com:ip:axi_vip:1.1 axi_vip_0]
 set_property CONFIG.INTERFACE_MODE {SLAVE} $axi_vip_0
 
+# VIP を 64bit に
+set_property -dict [list \
+  CONFIG.PROTOCOL   {AXI4} \
+  CONFIG.DATA_WIDTH {64} \
+  CONFIG.ADDR_WIDTH {32} \
+  CONFIG.ID_WIDTH   {1} \
+] $axi_vip_0
+
 # top module reference
 set block_name top
 set block_cell_name top_0
 set top_0 [create_bd_cell -type module -reference $block_name $block_cell_name]
+
+# top の M_AXI データ幅も 64bit に
+set_property -dict [list CONFIG.C_M_AXI_DATA_WIDTH {64}] $top_0
 
 # interface connection (Vivado infers M_AXI interface from M_AXI_* signals)
 connect_bd_intf_net -intf_net top_0_M_AXI [get_bd_intf_pins axi_vip_0/S_AXI] [get_bd_intf_pins top_0/M_AXI]

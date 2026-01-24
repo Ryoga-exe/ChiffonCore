@@ -23,9 +23,9 @@ module csrunit (
     let is_mret: logic = ctrl.is_csr && csr_addr == 12'b0011000_00010 && rs1[4:0] == 0 && ctrl.funct3 == 0 && rd_addr == 0;
 
     // wmasks
-    const MTVEC_WMASK : UIntX = 'hffff_fffc;
-    const MEPC_WMASK  : UIntX = 'hffff_fffc;
-    const MCAUSE_WMASK: UIntX = 'hffff_ffff;
+    const MTVEC_WMASK : UIntX = 'hffff_ffff_ffff_fffc;
+    const MEPC_WMASK  : UIntX = 'hffff_ffff_ffff_fffc;
+    const MCAUSE_WMASK: UIntX = 'hffff_ffff_ffff_ffff;
 
     // CSR
     var mtvec : UIntX;
