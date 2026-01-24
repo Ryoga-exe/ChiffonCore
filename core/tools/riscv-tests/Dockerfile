@@ -19,7 +19,7 @@ ENV PATH="${RISCV}/bin:${PATH}"
 SHELL ["/bin/bash", "-eu", "-o", "pipefail", "-c"]
 
 # --- Tools ---------------------------------------------
-COPY scripts/patch_linkld.py /usr/local/bin/patch_linkld.py
+COPY patch_linkld.py /usr/local/bin/patch_linkld.py
 RUN chmod +x /usr/local/bin/patch_linkld.py
 
 # --- Build dependencies --------------------------------
