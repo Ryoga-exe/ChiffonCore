@@ -18,6 +18,7 @@ package corectrl {
         rwb_en  : logic      , // write registers?
         is_lui  : logic      , // is LUI inst?
         is_aluop: logic      , // use ALU?
+        is_op32 : logic      , // OP-32 or OP-IMM-32?
         is_jump : logic      , // is jump inst?
         is_load : logic      , // is load inst?
         is_csr  : logic      , // is CSR inst?
