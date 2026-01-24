@@ -181,8 +181,6 @@ module core (
         i_membus.addr  = if_pc;
         i_membus.wen   = 0;
         i_membus.wdata = 'x; // no use
-
-        if_fifo_rready = !memu_stall; // memunit が処理中でないとき、FIFO から命令を取り出す
     }
 
     always_ff {
