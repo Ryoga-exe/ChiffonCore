@@ -18,6 +18,10 @@ ENV PATH="${RISCV}/bin:${PATH}"
 
 SHELL ["/bin/bash", "-eu", "-o", "pipefail", "-c"]
 
+# --- Tools ---------------------------------------------
+COPY scripts/patch_linkld_start0.py /usr/local/bin/patch_linkld_start0.py
+RUN chmod +x /usr/local/bin/patch_linkld_start0.py
+
 # --- Build dependencies --------------------------------
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -33,7 +37,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       gawk \
       patchutils \
       python3 \
-      perl \
       build-essential \
       bison \
       flex \
@@ -80,7 +83,7 @@ RUN git clone --recursive --depth 1 --shallow-submodules \
 WORKDIR /tmp/riscv-tests
 
 # patch link.ld start=0x0
-RUN perl -0777 -i -pe 's/\.\s*=\s*0x[0-9a-fA-F_]+\s*;/\. = 0x00000000;/m' env/p/link.ld
+RUN /usr/local/bin/patch_linkld_start0.py
 
 RUN install -d "${RISCV_TESTS_ISA_DIR}"
 
