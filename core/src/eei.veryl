@@ -13,7 +13,7 @@ package eei {
     type Addr   = logic       <XLEN>;
 
     // memory
-    const MEM_DATA_WIDTH: u32 = 32;
+    const MEM_DATA_WIDTH: u32 = 64;
     const MEM_ADDR_WIDTH: u32 = 20;
 
     // opcode

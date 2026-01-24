@@ -3,7 +3,7 @@ module membus_axi_master #(
     param AXI_ADDR_W: u32 = 32,
     param AXI_DATA_W: u32 = 32,
 
-    param DATA_WIDTH: u32 = 32,
+    param DATA_WIDTH: u32 = 64,
     param ADDR_WIDTH: u32 = 32, // NOTE: consider
 ) (
     clk: input clock,

@@ -79,15 +79,22 @@ module memunit (
                         state     = State::WaitReady;
                         req_wen   = inst_is_store(ctrl);
                         req_addr  = addr;
-                        req_wdata = rs2[MEM_DATA_WIDTH - 1:0] << {addr[1:0], 3'b0};
+                        req_wdata = rs2 << {addr[2:0], 3'b0};
                         req_wmask = case ctrl.funct3[1:0] {
-                            2'b00: 4'b1 << addr[1:0], // SB
-                            2'b01: case addr[1:0] { // SH
-                                2      : 4'b1100,
-                                0      : 4'b0011,
+                            2'b00: 8'b1 << addr[2:0], // SB
+                            2'b01: case addr[2:0] { // SH
+                                6      : 8'b11000000,
+                                4      : 8'b00110000,
+                                2      : 8'b00001100,
+                                0      : 8'b00000011,
                                 default: 'x,
                             },
-                            2'b10  : 4'b1111, // SW
+                            2'b10: case addr[2:0] { // SW
+                                0      : 8'b00001111,
+                                4      : 8'b11110000,
+                                default: 'x,
+                            },
+                            2'b11  : 8'b11111111, // SD
                             default: 'x,
                         };
                     }
