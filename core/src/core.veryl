@@ -1,5 +1,6 @@
 import eei::*;
 import corectrl::*;
+import pipeline::*;
 
 module core (
     clk     : input   clock                                    ,
@@ -10,46 +11,6 @@ module core (
     // ====================================================
     // * FIFO
     // ====================================================
-
-    // IF -> ID
-    struct if_fifo_type {
-        addr: Addr,
-        bits: Inst,
-    }
-
-    // ID -> EX
-    struct exq_type {
-        addr: Addr    ,
-        bits: Inst    ,
-        ctrl: InstCtrl,
-        imm : UIntX   ,
-    }
-
-    // EX -> MEM
-    struct memq_type {
-        addr      : Addr       ,
-        bits      : Inst       ,
-        ctrl      : InstCtrl   ,
-        imm       : UIntX      ,
-        alu_result: UIntX      ,
-        rs1_addr  : logic   <5>,
-        rs1_data  : UIntX      ,
-        rs2_data  : UIntX      ,
-        br_taken  : logic      ,
-        jump_addr : Addr       ,
-    }
-
-    // MEM -> WB
-    struct wbq_type {
-        addr      : Addr    ,
-        bits      : Inst    ,
-        ctrl      : InstCtrl,
-        imm       : UIntX   ,
-        alu_result: UIntX   ,
-        mem_rdata : UIntX   ,
-        csr_rdata : UIntX   ,
-    }
-
     // IF -> ID
     var if_fifo_wready    : logic       ;
     var if_fifo_wready_two: logic       ;
