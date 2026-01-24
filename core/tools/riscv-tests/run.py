@@ -6,27 +6,10 @@ from pathlib import Path
 
 PASS_PAT = re.compile(r"riscv-tests success!", re.IGNORECASE)
 FAIL_PAT = re.compile(r"riscv-tests failed!", re.IGNORECASE)
+XERR_PAT = re.compile(r"\b(ERROR|FATAL)\b", re.IGNORECASE)
 
 
-def is_windows_bat(path: str) -> bool:
-    p = path.lower()
-    return p.endswith(".bat") or p.endswith(".cmd")
-
-
-def discover_snapshot(
-    workdir: Path, preferred_prefix: str | None = "tb_riscv_tests"
-) -> str:
-    """
-    Vivado sim workdir layout (example):
-      simulation/simulation.sim/sim_1/behav/xsim/
-        xsim.dir/
-          <snapshot_name>/
-            xsimk.exe ...
-    We pick:
-      - if preferred_prefix matches exactly one folder -> that
-      - else if only one folder exists -> that
-      - else raise with candidates
-    """
+def discover_snapshot(workdir: Path, preferred_prefix: str = "tb_riscv_tests") -> str:
     xsim_dir = workdir / "xsim.dir"
     if not xsim_dir.is_dir():
         raise FileNotFoundError(f"xsim.dir not found under workdir: {workdir}")
@@ -35,51 +18,48 @@ def discover_snapshot(
     if not candidates:
         raise FileNotFoundError(f"No snapshot folders found in: {xsim_dir}")
 
-    if preferred_prefix:
-        pref = [c for c in candidates if c.startswith(preferred_prefix)]
-        if len(pref) == 1:
-            return pref[0]
-
+    pref = [c for c in candidates if c.startswith(preferred_prefix)]
+    if len(pref) == 1:
+        return pref[0]
     if len(candidates) == 1:
         return candidates[0]
-
-    # If many, show them so user can pass --snapshot explicitly
     raise RuntimeError(
         "Multiple snapshots found. Pass --snapshot explicitly. Candidates:\n  "
         + "\n  ".join(candidates)
     )
 
 
-def run_one(
+def to_posix_path(p: Path) -> str:
+    """
+    IMPORTANT (Windows + xsim):
+      Backslashes in -testplusarg values may get eaten/escaped by xsim.
+      Use forward slashes: C:/Users/... which Windows APIs accept.
+    """
+    s = str(p.resolve())
+    return s.replace("\\", "/")
+
+
+def run_one_shell(
     xsim_cmd: str,
     snapshot: str,
+    workdir: Path,
     out_log: Path,
     timeout_s: float,
     plusargs: list[str],
-    workdir: Path,
+    verbose: bool,
 ) -> tuple[bool, str, int | None]:
-    """
-    Runs one xsim invocation in `workdir`.
-      xsim <snapshot> -R --testplusarg KEY=VAL ...
-    Returns (ok, status_str, returncode_or_None)
-    """
-    # Build command list (no shell).
-    # If xsim_cmd is a .bat/.cmd, run via cmd /c.
-    if is_windows_bat(xsim_cmd):
-        cmd = ["cmd", "/c", xsim_cmd, snapshot, "-R"]
-    else:
-        cmd = [xsim_cmd, snapshot, "-R"]
-
-    for a in plusargs:
-        cmd += ["--testplusarg", a]
+    pa = " ".join([f'--testplusarg "{a}"' for a in plusargs])
+    cmd = f"{xsim_cmd} {snapshot} -R {pa}"
+    if verbose:
+        print(f"[CMD] {cmd}")
 
     out_log.parent.mkdir(parents=True, exist_ok=True)
-
     try:
         with open(out_log, "w", encoding="utf-8", errors="replace") as f:
             p = subprocess.run(
                 cmd,
                 cwd=str(workdir),
+                shell=True,
                 stdout=f,
                 stderr=subprocess.STDOUT,
                 timeout=None if timeout_s == 0 else timeout_s,
@@ -87,7 +67,6 @@ def run_one(
             )
             rc = p.returncode
     except subprocess.TimeoutExpired:
-        # Append timeout marker
         with open(out_log, "a", encoding="utf-8", errors="replace") as f:
             f.write("\n[TIMEOUT]\n")
         return False, "TIMEOUT", None
@@ -97,17 +76,16 @@ def run_one(
         return True, "PASS", rc
     if FAIL_PAT.search(text):
         return False, "FAIL", rc
+    if rc != 0 or XERR_PAT.search(text):
+        return False, "ERROR", rc
     return False, "UNKNOWN", rc
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
 
-    # Vivado xsim
     ap.add_argument(
-        "--xsim",
-        required=True,
-        help="xsim executable (e.g. C:\\Xilinx\\Vivado\\2024.2\\bin\\xsim.bat or just 'xsim')",
+        "--xsim", required=True, help="xsim executable (xsim.bat or full path to it)"
     )
     ap.add_argument(
         "--workdir",
@@ -122,14 +100,11 @@ def main() -> int:
     ap.add_argument(
         "--snapshot_prefix",
         default="tb_riscv_tests",
-        help="auto-detect: prefer snapshots starting with this prefix",
+        help="auto-detect preference prefix",
     )
 
-    # Test files
     ap.add_argument("--dir", required=True, help="directory containing hex files")
-    ap.add_argument(
-        "--prefix", default="rv32ui-p-", help="test filename prefix (default rv32ui-p-)"
-    )
+    ap.add_argument("--prefix", default="rv32ui-p-", help="test filename prefix")
     ap.add_argument("--ext", default=".hex", help="file extension (default .hex)")
     ap.add_argument("--recursive", action="store_true", help="search recursively")
     ap.add_argument("--results", default="results", help="output directory")
@@ -139,8 +114,10 @@ def main() -> int:
         default=20.0,
         help="per-test timeout seconds (0 = no limit)",
     )
+    ap.add_argument(
+        "--verbose", action="store_true", help="print first command line(s)"
+    )
 
-    # TB plusargs (match your tb_riscv_tests.sv)
     ap.add_argument("--membase", default="20000000")
     ap.add_argument("--entry", default="00000000")
     ap.add_argument("--tohost", default="00001000")
@@ -173,14 +150,19 @@ def main() -> int:
     out_dir = Path(args.results).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    if args.recursive:
-        files = sorted(tests_dir.rglob(f"{args.prefix}*{args.ext}"))
-    else:
-        files = sorted(tests_dir.glob(f"{args.prefix}*{args.ext}"))
-
+    files = (
+        sorted(tests_dir.rglob(f"{args.prefix}*{args.ext}"))
+        if args.recursive
+        else sorted(tests_dir.glob(f"{args.prefix}*{args.ext}"))
+    )
     if not files:
         print(f"[ERR] No tests found: {tests_dir} ({args.prefix}*{args.ext})")
         return 2
+
+    print(f"[INFO] workdir  : {workdir}")
+    print(f"[INFO] snapshot : {snapshot}")
+    print(f"[INFO] tests    : {len(files)} files")
+    print(f"[INFO] results  : {out_dir}")
 
     plusargs_base = [
         f"MEMBASE={args.membase}",
@@ -189,20 +171,16 @@ def main() -> int:
         f"TIMEOUT={args.tb_timeout}",
     ]
 
-    print(f"[INFO] workdir  : {workdir}")
-    print(f"[INFO] snapshot : {snapshot}")
-    print(f"[INFO] tests    : {len(files)} files")
-    print(f"[INFO] results  : {out_dir}")
-
     results: list[tuple[str, bool, str, int | None, str]] = []
 
-    for f in files:
-        log_name = f"{f.name}.log.txt"
-        out_log = out_dir / log_name
+    for idx, f in enumerate(files):
+        out_log = out_dir / f"{f.name}.log.txt"
+        plusargs = plusargs_base + [f"HEX={str(to_posix_path(f))}"]
 
-        plusargs = plusargs_base + [f"HEX={str(f)}"]
-        ok, status, rc = run_one(
-            args.xsim, snapshot, out_log, args.time_limit, plusargs, workdir
+        # print command only for the first test unless verbose
+        show_cmd = args.verbose and idx < 3
+        ok, status, rc = run_one_shell(
+            args.xsim, snapshot, workdir, out_log, args.time_limit, plusargs, show_cmd
         )
 
         print(f"{status:7s} : {f.name}")
@@ -212,12 +190,9 @@ def main() -> int:
     total = len(results)
     summary = f"Test Result : {passed} / {total}"
 
-    # sort for stable report
-    results_sorted = sorted(results, key=lambda x: x[0])
-
     with open(out_dir / "result.txt", "w", encoding="utf-8") as w:
         w.write(summary + "\n")
-        for name, ok, status, rc, logp in results_sorted:
+        for name, ok, status, rc, logp in sorted(results, key=lambda x: x[0]):
             w.write(f"{status:7s} : {name} (rc={rc}) log={logp}\n")
 
     print(summary)
