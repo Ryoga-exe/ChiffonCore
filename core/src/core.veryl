@@ -222,12 +222,12 @@ module core (
     };
 
     // ====================================================
-    // * Instruction Decoder
+    // * ID Stage
     // ====================================================
+
     let ids_valid    : logic    = if_fifo_rvalid;
     let ids_pc       : Addr     = if_fifo_rdata.addr;
     let ids_inst_bits: Inst     = if_fifo_rdata.bits;
-    var ids_is_new   : logic   ; // Whether the instruction was issued in the current clock cycle
     var ids_ctrl     : InstCtrl;
     var ids_imm      : UIntX   ;
 
@@ -237,13 +237,23 @@ module core (
         imm : ids_imm      ,
     );
 
-    always_ff {
-        if_reset {
-            ids_is_new = 0;
-        } else {
-            ids_is_new = if if_fifo_rvalid ? if_fifo_rready : 1;
-        }
+    always_comb {
+        // ID -> EX
+        if_fifo_rready = exq_wready;
+        exq_wvalid     = if_fifo_rvalid;
+        exq_wdata.addr = if_fifo_rdata.addr;
+        exq_wdata.bits = if_fifo_rdata.bits;
+        exq_wdata.ctrl = ids_ctrl;
+        exq_wdata.imm  = ids_imm;
     }
+
+    // always_ff {
+    //     if_reset {
+    //         ids_is_new = 0;
+    //     } else {
+    //         ids_is_new = if if_fifo_rvalid ? if_fifo_rready : 1;
+    //     }
+    // }
 
     // ====================================================
     // * Registers
