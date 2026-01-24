@@ -20,8 +20,23 @@ make build
 make simulation
 ```
 
+## Create riscv-tests hex
+
+```shell
+make riscv-tests
+```
+
 ## Cleaning up
 
 ```shell
 make clean
+```
+
+## Run all riscv-tests
+
+```shell
+python3 tools/riscv-tests/run.py
+
+# to specify prefix (default: rv32ui-p-)
+python3 tools/riscv-tests/run.py --prefix
 ```

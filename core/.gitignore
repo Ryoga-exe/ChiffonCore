@@ -14,3 +14,7 @@ simulation
 *.xpr
 *.jou
 *.log
+
+# riscv-tests
+test/hex/riscv-tests
+results
