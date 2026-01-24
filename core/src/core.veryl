@@ -80,22 +80,6 @@ module core (
     var wbq_rvalid: logic   ;
     var wbq_rdata : wbq_type;
 
-    inst if_fifo: fifo #(
-        DATA_TYPE: if_fifo_type,
-        WIDTH    : 3           ,
-    ) (
-        clk                           ,
-        rst                           ,
-        flush     : control_hazard    ,
-        wready    : if_fifo_wready    ,
-        wready_two: if_fifo_wready_two,
-        wvalid    : if_fifo_wvalid    ,
-        wdata     : if_fifo_wdata     ,
-        rready    : if_fifo_rready    ,
-        rvalid    : if_fifo_rvalid    ,
-        rdata     : if_fifo_rdata     ,
-    );
-
     inst id_ex_fifo: fifo #(
         DATA_TYPE: exq_type,
         WIDTH    : 1       ,
@@ -162,7 +146,7 @@ module core (
     }
 
     // ====================================================
-    // * Instruction Fetch
+    // * IF Stage
     // ====================================================
     var if_pc          : Addr ; // program counter
     var if_is_requested: logic; // fetch 中か
@@ -173,6 +157,24 @@ module core (
     var control_hazard        : logic;
     var control_hazard_pc_next: Addr ;
 
+    // FIFO
+    inst if_fifo: fifo #(
+        DATA_TYPE: if_fifo_type,
+        WIDTH    : 3           ,
+    ) (
+        clk                           ,
+        rst                           ,
+        flush     : control_hazard    ,
+        wready    : if_fifo_wready    ,
+        wready_two: if_fifo_wready_two,
+        wvalid    : if_fifo_wvalid    ,
+        wdata     : if_fifo_wdata     ,
+        rready    : if_fifo_rready    ,
+        rvalid    : if_fifo_rvalid    ,
+        rdata     : if_fifo_rdata     ,
+    );
+
+    // fetch
     always_comb {
         // FIFO に 2 個以上空きがあるとき fetch
         i_membus.valid = if_fifo_wready_two;
