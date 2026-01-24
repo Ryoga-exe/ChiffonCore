@@ -136,7 +136,7 @@ module tb_riscv_tests;
 
   task automatic memread32(input logic [31:0] addr, output logic [31:0] data);
     begin
-      agent.mem_model.backdoor_memory_read_4byte(addr, data);
+      data = agent.mem_model.backdoor_memory_read_4byte(addr);
     end
   endtask
 
