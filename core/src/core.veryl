@@ -11,15 +11,6 @@ module core (
     // ====================================================
     // * FIFO
     // ====================================================
-    // IF -> ID
-    var if_fifo_wready    : logic       ;
-    var if_fifo_wready_two: logic       ;
-    var if_fifo_wvalid    : logic       ;
-    var if_fifo_wdata     : if_fifo_type;
-    var if_fifo_rready    : logic       ;
-    var if_fifo_rvalid    : logic       ;
-    var if_fifo_rdata     : if_fifo_type;
-    // ID -> EX
     var exq_wready: logic   ;
     var exq_wvalid: logic   ;
     var exq_wdata : exq_type;
@@ -87,92 +78,38 @@ module core (
     // ====================================================
     // * IF Stage
     // ====================================================
-    var if_pc          : Addr ; // program counter
-    var if_is_requested: logic; // fetch 中か
-    var if_pc_requested: Addr ; // 要求アドレス
-
-    let if_pc_next: Addr = if_pc + 4;
-
     var control_hazard        : logic;
     var control_hazard_pc_next: Addr ;
 
-    // FIFO
-    inst if_fifo: fifo #(
-        DATA_TYPE: if_fifo_type,
-        WIDTH    : 3           ,
-    ) (
-        clk                           ,
-        rst                           ,
-        flush     : control_hazard    ,
-        wready    : if_fifo_wready    ,
-        wready_two: if_fifo_wready_two,
-        wvalid    : if_fifo_wvalid    ,
-        wdata     : if_fifo_wdata     ,
-        rready    : if_fifo_rready    ,
-        rvalid    : if_fifo_rvalid    ,
-        rdata     : if_fifo_rdata     ,
+    // var if_fifo_wready    : logic       ;
+    // var if_fifo_wready_two: logic       ;
+    // var if_fifo_wvalid    : logic       ;
+    // var if_fifo_wdata     : if_fifo_type;
+    var if_fifo_rready: logic       ;
+    var if_fifo_rvalid: logic       ;
+    var if_fifo_rdata : if_fifo_type;
+
+    var debug_pc          : Addr ;
+    var debug_is_requested: logic;
+    var debug_pc_requested: Addr ;
+
+    inst u_if_stage: if_stage (
+        clk  ,
+        rst  ,
+
+        control_hazard          ,
+        control_hazard_pc_next  ,
+
+        fifo_rready: if_fifo_rready,
+        fifo_rvalid: if_fifo_rvalid,
+        fifo_rdata : if_fifo_rdata ,
+
+        i_membus  ,
+
+        debug_pc            ,
+        debug_is_requested  ,
+        debug_pc_requested  ,
     );
-
-    // fetch
-    always_comb {
-        // FIFO に 2 個以上空きがあるとき fetch
-        i_membus.valid = if_fifo_wready_two;
-        i_membus.addr  = if_pc;
-        i_membus.wen   = 0;
-        i_membus.wdata = 'x; // no use
-    }
-
-    always_ff {
-        if_reset {
-            if_pc           = 0;
-            if_is_requested = 0;
-            if_pc_requested = 0;
-        } else {
-            if control_hazard {
-                if_pc           = control_hazard_pc_next;
-                if_is_requested = 0;
-            } else {
-                if if_is_requested {
-                    if i_membus.rvalid {
-                        if_is_requested = i_membus.ready && i_membus.valid;
-                        if i_membus.ready && i_membus.valid {
-                            if_pc           = if_pc_next;
-                            if_pc_requested = if_pc;
-                        }
-                    }
-                } else {
-                    if i_membus.ready && i_membus.valid {
-                        if_is_requested = 1;
-                        if_pc           = if_pc_next;
-                        if_pc_requested = if_pc;
-                    }
-                }
-            }
-        }
-    }
-
-    // IF FIFO
-    always_ff {
-        if_reset {
-            if_fifo_wvalid = 0;
-            if_fifo_wdata  = 0;
-        } else {
-            if control_hazard {
-                if_fifo_wvalid = 0;
-            } else {
-                if if_is_requested && i_membus.rvalid {
-                    if_fifo_wvalid     = 1;
-                    if_fifo_wdata.addr = if_pc_requested;
-                    if_fifo_wdata.bits = i_membus.rdata;
-                } else {
-                    if if_fifo_wvalid && if_fifo_wready {
-                        // FIFO にデータを格納できる
-                        if_fifo_wvalid = 0;
-                    }
-                }
-            }
-        }
-    }
 
     // ====================================================
     // * ID Stage
@@ -405,9 +342,9 @@ module core (
             $display("# %d", clock_count);
 
             $display("IF ------");
-            $display("     pc : %h", if_pc);
-            $display(" is req : %b", if_is_requested);
-            $display(" pc req : %h", if_pc_requested);
+            $display("     pc : %h", debug_pc);
+            $display(" is req : %b", debug_is_requested);
+            $display(" pc req : %h", debug_pc_requested);
             $display("ID ------");
             if ids_valid {
                 $display("  %h : %h", ids_pc, if_fifo_rdata.bits);
