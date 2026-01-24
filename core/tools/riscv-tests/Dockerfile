@@ -16,12 +16,11 @@ ARG RISCV_TESTS_ISA_DIR=${RISCV_TESTS_INSTALL}/share/riscv-tests/isa
 ENV RISCV="${RISCV}"
 ENV PATH="${RISCV}/bin:${PATH}"
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+SHELL ["/bin/bash", "-eu", "-o", "pipefail", "-c"]
 
 # ---- build deps ----
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
       git \
@@ -51,21 +50,19 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 WORKDIR /tmp
 
 # ---- riscv-gnu-toolchain (multilib): clone ----
-RUN set -eux; \
-    git clone --recursive --depth 1 --shallow-submodules \
+RUN git clone --recursive --depth 1 --shallow-submodules \
       --branch "${RISCV_GNU_TOOLCHAIN_REF}" \
       https://github.com/riscv-collab/riscv-gnu-toolchain /tmp/riscv-gnu-toolchain
 
 WORKDIR /tmp/riscv-gnu-toolchain
-RUN set -eux; ./configure --prefix="${RISCV}" --enable-multilib
-RUN set -eux; make -j"$(nproc)"
+RUN ./configure --prefix="${RISCV}" --enable-multilib
+RUN make -j"$(nproc)"
 
 WORKDIR /tmp
 RUN rm -rf /tmp/riscv-gnu-toolchain
 
 # ---- riscv32-unknown-elf-* alias ----
-RUN set -eux; \
-    tools=(gcc g++ as ld objcopy objdump ar ranlib nm strip size readelf); \
+RUN tools=(gcc g++ as ld objcopy objdump ar ranlib nm strip size readelf); \
     for t in "${tools[@]}"; do \
       src="${RISCV}/bin/riscv64-unknown-elf-${t}"; \
       dst="${RISCV}/bin/riscv32-unknown-elf-${t}"; \
@@ -75,31 +72,26 @@ RUN set -eux; \
     done
 
 # ---- riscv-tests: clone ----
-RUN set -eux; \
-    git clone --recursive --depth 1 --shallow-submodules \
+RUN git clone --recursive --depth 1 --shallow-submodules \
       --branch "${RISCV_TESTS_REF}" \
       https://github.com/riscv-software-src/riscv-tests /tmp/riscv-tests
 
 WORKDIR /tmp/riscv-tests
 
 # ---- riscv-tests: patch link.ld start=0x0 ----
-RUN set -eux; \
-    perl -0777 -i -pe 's/\.\s*=\s*0x[0-9a-fA-F_]+\s*;/\. = 0x00000000;/m' env/p/link.ld
+RUN perl -0777 -i -pe 's/\.\s*=\s*0x[0-9a-fA-F_]+\s*;/\. = 0x00000000;/m' env/p/link.ld
 
 # ---- riscv-tests: prepare install dir ----
-RUN set -eux; \
-    install -d "${RISCV_TESTS_ISA_DIR}"
+RUN install -d "${RISCV_TESTS_ISA_DIR}"
 
 # ---- riscv-tests: build & copy RV32 ----
-RUN set -eux; \
-    make -C isa clean; \
+RUN make -C isa clean; \
     make -C isa -j"$(nproc)" XLEN=32 RISCV_PREFIX=riscv32-unknown-elf-; \
     find isa -maxdepth 1 -type f -name 'rv32ui-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ; \
     find isa -maxdepth 1 -type f -name 'rv32mi-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ;
 
 # ---- riscv-tests: build & copy RV64 ----
-RUN set -eux; \
-    make -C isa clean; \
+RUN make -C isa clean; \
     make -C isa -j"$(nproc)" XLEN=64 RISCV_PREFIX=riscv64-unknown-elf-; \
     find isa -maxdepth 1 -type f -name 'rv64ui-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ; \
     find isa -maxdepth 1 -type f -name 'rv64mi-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ;
@@ -113,18 +105,18 @@ RUN rm -rf /tmp/riscv-tests
 ############################
 FROM ubuntu:24.04 AS runtime
 ARG DEBIAN_FRONTEND=noninteractive
+
 ARG RISCV=/opt/riscv
 ARG RISCV_TESTS_INSTALL=/opt/riscv-tests-install
 
 ENV RISCV="${RISCV}"
 ENV PATH="${RISCV}/bin:${PATH}"
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+SHELL ["/bin/bash", "-eu", "-o", "pipefail", "-c"]
 
 # ---- runtime deps ----
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
       ca-certificates \
@@ -139,8 +131,8 @@ COPY --from=builder ${RISCV_TESTS_INSTALL} ${RISCV_TESTS_INSTALL}
 COPY bin2hex.py /usr/local/bin/bin2hex.py
 COPY export_riscv_tests.sh /usr/local/bin/export_riscv_tests.sh
 
-RUN set -eux; \
-    sed -i 's/\r$//' /usr/local/bin/bin2hex.py /usr/local/bin/export_riscv_tests.sh; \
+# on Windows (CRLF -> LF) + perms
+RUN sed -i 's/\r$//' /usr/local/bin/bin2hex.py /usr/local/bin/export_riscv_tests.sh; \
     chmod +x /usr/local/bin/export_riscv_tests.sh
 
 WORKDIR /work
