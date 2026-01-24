@@ -247,26 +247,88 @@ module core (
         exq_wdata.imm  = ids_imm;
     }
 
-    // always_ff {
-    //     if_reset {
-    //         ids_is_new = 0;
-    //     } else {
-    //         ids_is_new = if if_fifo_rvalid ? if_fifo_rready : 1;
-    //     }
-    // }
+    // ====================================================
+    // * EX Stage
+    // ====================================================
+    let exs_valid    : logic    = exq_rvalid;
+    let exs_pc       : Addr     = exq_rdata.addr;
+    let exs_inst_bits: Inst     = exq_rdata.bits;
+    let exs_ctrl     : InstCtrl = exq_rdata.ctrl;
+    let exs_imm      : UIntX    = exq_rdata.imm;
+
+    // Registers
+    var regfile: UIntX<32>;
+
+    // register number
+    let exs_rs1_addr: logic<5> = ids_inst_bits[19:15];
+    let exs_rs2_addr: logic<5> = ids_inst_bits[24:20];
+
+    // source register data
+    let exs_rs1_data: UIntX = if exs_rs1_addr == 0 ? 0 : regfile[exs_rs1_addr];
+    let exs_rs2_data: UIntX = if exs_rs2_addr == 0 ? 0 : regfile[exs_rs2_addr];
+
+    // ALU
+    var exs_op1       : UIntX;
+    var exs_op2       : UIntX;
+    var exs_alu_result: UIntX;
+
+    always_comb {
+        case exs_ctrl.itype {
+            InstType::R, InstType::B: {
+                exs_op1 = exs_rs1_data;
+                exs_op2 = exs_rs2_data;
+            }
+            InstType::I, InstType::S: {
+                exs_op1 = exs_rs1_data;
+                exs_op2 = ids_imm;
+            }
+            InstType::U, InstType::J: {
+                exs_op1 = ids_pc;
+                exs_op2 = ids_imm;
+            }
+            default: {
+                exs_op1 = 'x;
+                exs_op2 = 'x;
+            }
+        }
+    }
+
+    inst alum: alu (
+        ctrl  : ids_ctrl      ,
+        op1   : exs_op1       ,
+        op2   : exs_op2       ,
+        result: exs_alu_result,
+    );
+
+    // Bru
+    var exs_brunit_take: logic;
+
+    inst bru: brunit (
+        funct3: ids_ctrl.funct3,
+        op1   : exs_op1        ,
+        op2   : exs_op2        ,
+        take  : exs_brunit_take,
+    );
+
+    always_comb {
+        // EX -> MEM
+        exq_rready            = memq_wready;
+        memq_wvalid           = exq_rvalid;
+        memq_wdata.addr       = exq_rdata.addr;
+        memq_wdata.bits       = exq_rdata.bits;
+        memq_wdata.ctrl       = exq_rdata.ctrl;
+        memq_wdata.imm        = exq_rdata.imm;
+        memq_wdata.rs1_addr   = exs_rs1_addr;
+        memq_wdata.rs1_data   = exs_rs1_data;
+        memq_wdata.rs2_data   = exs_rs2_data;
+        memq_wdata.alu_result = exs_alu_result;
+        memq_wdata.br_taken   = exs_ctrl.is_jump || inst_is_br(exs_ctrl) && exs_brunit_take;
+        memq_wdata.jump_addr  = if inst_is_br(exs_ctrl) ? exs_pc + exs_imm : exs_alu_result & ~1;
+    }
 
     // ====================================================
     // * Registers
     // ====================================================
-    var regfile: UIntX<32>;
-
-    // register number
-    let rs1_addr: logic<5> = ids_inst_bits[19:15];
-    let rs2_addr: logic<5> = ids_inst_bits[24:20];
-
-    // source register data
-    let rs1_data: UIntX = if rs1_addr == 0 ? 0 : regfile[rs1_addr];
-    let rs2_data: UIntX = if rs2_addr == 0 ? 0 : regfile[rs2_addr];
 
     let rd_addr: logic<5> = ids_inst_bits[11:7];
     let wb_data: UIntX    = switch {
@@ -274,7 +336,7 @@ module core (
         ids_ctrl.is_jump: ids_pc + 4,
         ids_ctrl.is_load: memu_rdata,
         ids_ctrl.is_csr : csru_rdata,
-        default         : alu_result,
+        default         : exs_alu_result,
     };
 
     always_ff {
@@ -284,40 +346,6 @@ module core (
         }
     }
 
-    // ====================================================
-    // * ALU
-    // ====================================================
-    var op1       : UIntX;
-    var op2       : UIntX;
-    var alu_result: UIntX;
-
-    always_comb {
-        case ids_ctrl.itype {
-            InstType::R, InstType::B: {
-                op1 = rs1_data;
-                op2 = rs2_data;
-            }
-            InstType::I, InstType::S: {
-                op1 = rs1_data;
-                op2 = ids_imm;
-            }
-            InstType::U, InstType::J: {
-                op1 = ids_pc;
-                op2 = ids_imm;
-            }
-            default: {
-                op1 = 'x;
-                op2 = 'x;
-            }
-        }
-    }
-
-    inst alum: alu (
-        ctrl  : ids_ctrl  ,
-        op1               ,
-        op2               ,
-        result: alu_result,
-    );
 
     // ====================================================
     // * Memory
@@ -326,28 +354,16 @@ module core (
     var memu_stall: logic;
 
     inst memu: memunit (
-        clk               ,
-        rst               ,
-        valid : ids_valid ,
-        is_new: ids_is_new,
-        ctrl  : ids_ctrl  ,
-        addr  : alu_result,
-        rs2   : rs2_data  ,
-        rdata : memu_rdata,
-        stall : memu_stall,
-        membus: d_membus  ,
-    );
-
-    // ====================================================
-    // * Brunit
-    // ====================================================
-    var brunit_take: logic;
-
-    inst bru: brunit (
-        funct3: ids_ctrl.funct3,
-        op1                    ,
-        op2                    ,
-        take  : brunit_take    ,
+        clk                   ,
+        rst                   ,
+        valid : ids_valid     ,
+        is_new: ids_is_new    ,
+        ctrl  : ids_ctrl      ,
+        addr  : exs_alu_result,
+        rs2   : exs_rs2_data  ,
+        rdata : memu_rdata    ,
+        stall : memu_stall    ,
+        membus: d_membus      ,
     );
 
     // ====================================================
@@ -365,11 +381,14 @@ module core (
         ctrl    : ids_ctrl            ,
         rd_addr                       ,
         csr_addr: ids_inst_bits[31:20],
-        rs1     : if ids_ctrl.funct3[2] == 1 && ids_ctrl.funct3[1:0] != 0 ? {1'b0 repeat XLEN - $bits(rs1_addr), rs1_addr} // expand rs1 with 0
-         : rs1_data,
-        rdata      : csru_rdata                                                                                                         ,
-        raise_trap : csru_raise_trap                                                                                                    ,
-        trap_vector: csru_trap_vector                                                                                                   ,
+        rs1     : if ids_ctrl.funct3[2] == 1 && ids_ctrl.funct3[1:0] != 0 ?
+            {1'b0 repeat XLEN - $bits(exs_rs1_addr), exs_rs1_addr} // expand rs1 with 0
+        :
+            exs_rs1_data
+        ,
+        rdata      : csru_rdata      ,
+        raise_trap : csru_raise_trap ,
+        trap_vector: csru_trap_vector,
     );
 
     // ====================================================
@@ -388,11 +407,11 @@ module core (
                 $display("%h : %h", ids_pc, ids_inst_bits);
                 $display("  itype   : %b", ids_ctrl.itype);
                 $display("  imm     : %h", ids_imm);
-                $display("  rs1[%d] : %h", rs1_addr, rs1_data);
-                $display("  rs2[%d] : %h", rs2_addr, rs2_data);
-                $display("  op1     : %h", op1);
-                $display("  op2     : %h", op2);
-                $display("  alu_res : %h", alu_result);
+                $display("  rs1[%d] : %h", exs_rs1_addr, exs_rs1_data);
+                $display("  rs2[%d] : %h", exs_rs2_addr, exs_rs2_data);
+                $display("  op1     : %h", exs_op1);
+                $display("  op2     : %h", exs_op2);
+                $display("  alu_res : %h", exs_alu_result);
                 $display("  mem stall : %b", memu_stall);
                 $display("  mem rdata : %h", memu_rdata);
                 if if_fifo_rready && ids_ctrl.rwb_en {
