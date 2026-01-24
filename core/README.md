@@ -31,3 +31,12 @@ make riscv-tests
 ```shell
 make clean
 ```
+
+## Run all riscv-tests
+
+```shell
+python3 tools/riscv-tests/run.py
+
+# to specify prefix (default: rv32ui-p-)
+python3 tools/riscv-tests/run.py --prefix
+```

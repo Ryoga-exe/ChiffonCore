@@ -85,12 +85,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
 
     ap.add_argument(
-        "--xsim", required=True, help="xsim executable (xsim.bat or full path to it)"
+        "--xsim", default="xsim", help="xsim executable (xsim.bat or full path to it)"
     )
     ap.add_argument(
         "--workdir",
-        required=True,
-        help=r"Vivado sim workdir (e.g. simulation\simulation.sim\sim_1\behav\xsim)",
+        default="simulation/simulation.sim/sim_1/behav/xsim",
+        help="Vivado sim workdir (e.g. simulation/simulation.sim/sim_1/behav/xsim)",
     )
     ap.add_argument(
         "--snapshot",
@@ -103,7 +103,9 @@ def main() -> int:
         help="auto-detect preference prefix",
     )
 
-    ap.add_argument("--dir", required=True, help="directory containing hex files")
+    ap.add_argument(
+        "--dir", default="test/hex/riscv-tests", help="directory containing hex files"
+    )
     ap.add_argument("--prefix", default="rv32ui-p-", help="test filename prefix")
     ap.add_argument("--ext", default=".hex", help="file extension (default .hex)")
     ap.add_argument("--recursive", action="store_true", help="search recursively")
