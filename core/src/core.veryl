@@ -123,28 +123,6 @@ module core (
         rdata : wbq_rdata ,
     );
 
-    always_ff {
-        if_reset {
-            if_fifo_wvalid = 0;
-            if_fifo_wdata  = 0;
-        } else {
-            if control_hazard {
-                if_fifo_wvalid = 0;
-            } else {
-                if if_is_requested && i_membus.rvalid {
-                    if_fifo_wvalid     = 1;
-                    if_fifo_wdata.addr = if_pc_requested;
-                    if_fifo_wdata.bits = i_membus.rdata;
-                } else {
-                    if if_fifo_wvalid && if_fifo_wready {
-                        // FIFO にデータを格納できる
-                        if_fifo_wvalid = 0;
-                    }
-                }
-            }
-        }
-    }
-
     // ====================================================
     // * IF Stage
     // ====================================================
@@ -212,10 +190,32 @@ module core (
         }
     }
 
+    // IF FIFO
+    always_ff {
+        if_reset {
+            if_fifo_wvalid = 0;
+            if_fifo_wdata  = 0;
+        } else {
+            if control_hazard {
+                if_fifo_wvalid = 0;
+            } else {
+                if if_is_requested && i_membus.rvalid {
+                    if_fifo_wvalid     = 1;
+                    if_fifo_wdata.addr = if_pc_requested;
+                    if_fifo_wdata.bits = i_membus.rdata;
+                } else {
+                    if if_fifo_wvalid && if_fifo_wready {
+                        // FIFO にデータを格納できる
+                        if_fifo_wvalid = 0;
+                    }
+                }
+            }
+        }
+    }
+
     // ====================================================
     // * ID Stage
     // ====================================================
-
     let ids_valid    : logic    = if_fifo_rvalid;
     let ids_pc       : Addr     = if_fifo_rdata.addr;
     let ids_inst_bits: Inst     = if_fifo_rdata.bits;
@@ -271,11 +271,11 @@ module core (
             }
             InstType::I, InstType::S: {
                 exs_op1 = exs_rs1_data;
-                exs_op2 = ids_imm;
+                exs_op2 = exs_imm;
             }
             InstType::U, InstType::J: {
-                exs_op1 = ids_pc;
-                exs_op2 = ids_imm;
+                exs_op1 = exs_pc;
+                exs_op2 = exs_imm;
             }
             default: {
                 exs_op1 = 'x;
@@ -285,7 +285,7 @@ module core (
     }
 
     inst alum: alu (
-        ctrl  : ids_ctrl      ,
+        ctrl  : exs_ctrl      ,
         op1   : exs_op1       ,
         op2   : exs_op2       ,
         result: exs_alu_result,
@@ -295,7 +295,7 @@ module core (
     var exs_brunit_take: logic;
 
     inst bru: brunit (
-        funct3: ids_ctrl.funct3,
+        funct3: exs_ctrl.funct3,
         op1   : exs_op1        ,
         op2   : exs_op2        ,
         take  : exs_brunit_take,
