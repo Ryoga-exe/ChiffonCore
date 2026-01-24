@@ -13,6 +13,7 @@ set_property BOARD_PART avnet.com:ultra96v2:part0:1.2 [current_project]
 
 # --- Add RTL Sources -----------------------------------
 add_files -fileset sources_1 [glob target/*.sv]
+add_files -fileset sources_1 [glob target/**/*.sv]
 add_files -fileset sources_1 target/top.v
 update_compile_order -fileset sources_1
 
