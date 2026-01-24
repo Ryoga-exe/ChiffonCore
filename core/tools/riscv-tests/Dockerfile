@@ -8,6 +8,10 @@ ARG RISCV=/opt/riscv
 ARG RISCV_GNU_TOOLCHAIN_REF=master
 ARG RISCV_TESTS_REF=master
 
+# riscv-tests install先
+ARG RISCV_TESTS_INSTALL=/opt/riscv-tests-install
+ARG RISCV_TESTS_ISA_DIR=${RISCV_TESTS_INSTALL}/share/riscv-tests/isa
+
 ENV RISCV="${RISCV}"
 ENV PATH="${RISCV}/bin:${PATH}"
 
@@ -19,9 +23,9 @@ RUN --mount=type=cache,target=/var/cache/apt \
     set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-      git ca-certificates curl \
+      ca-certificates curl git \
       autoconf automake autotools-dev libtool gawk patchutils \
-      python3 perl \
+      perl python3 \
       build-essential bison flex texinfo gperf bc \
       libmpc-dev libmpfr-dev libgmp-dev zlib1g-dev libexpat-dev; \
     rm -rf /var/lib/apt/lists/*
@@ -32,49 +36,46 @@ WORKDIR /tmp
 RUN set -eux; \
     git clone --recursive --depth 1 --shallow-submodules \
       --branch "${RISCV_GNU_TOOLCHAIN_REF}" \
-      https://github.com/riscv-collab/riscv-gnu-toolchain riscv-gnu-toolchain; \
-    cd riscv-gnu-toolchain; \
+      https://github.com/riscv-collab/riscv-gnu-toolchain /tmp/riscv-gnu-toolchain; \
+    cd /tmp/riscv-gnu-toolchain; \
     ./configure --prefix="${RISCV}" --enable-multilib; \
     make -j"$(nproc)"; \
-    cd /; rm -rf /tmp/riscv-gnu-toolchain
+    rm -rf /tmp/riscv-gnu-toolchain
 
 # ---- riscv32-unknown-elf-* alias
 RUN set -eux; \
-    for tool in gcc g++ as ld objcopy objdump ar ranlib nm strip size readelf; do \
-      if [ -x "${RISCV}/bin/riscv64-unknown-elf-${tool}" ]; then \
-        ln -sf "riscv64-unknown-elf-${tool}" "${RISCV}/bin/riscv32-unknown-elf-${tool}"; \
-      fi; \
+    tools=(gcc g++ as ld objcopy objdump ar ranlib nm strip size readelf); \
+    for t in "${tools[@]}"; do \
+      src="${RISCV}/bin/riscv64-unknown-elf-${t}"; \
+      dst="${RISCV}/bin/riscv32-unknown-elf-${t}"; \
+      if [[ -x "${src}" ]]; then ln -sf "riscv64-unknown-elf-${t}" "${dst}"; fi; \
     done
 
-# ---- riscv-tests build (RV32 + RV64, env/p, start=0x0) ----
+# ---- riscv-tests: build isa (RV32 + RV64, env/p, start=0x0) ----
 RUN set -eux; \
     git clone --recursive --depth 1 --shallow-submodules \
       --branch "${RISCV_TESTS_REF}" \
       https://github.com/riscv-software-src/riscv-tests /tmp/riscv-tests; \
     cd /tmp/riscv-tests; \
-    # env/p/link.ld の先頭を 0x00000000 に
+    \
+    # env/p/link.ld の先頭を 0x00000000 にする
     perl -0777 -i -pe 's/\.\s*=\s*0x[0-9a-fA-F_]+\s*;/\. = 0x00000000;/m' env/p/link.ld; \
     \
-    # RV32I(+Zicsr,+Zifencei)
-    make -C isa clean; \
-    make -C isa -j"$(nproc)" \
-      XLEN=32 \
-      RISCV_PREFIX=riscv32-unknown-elf- \
-      RISCV_GCC_OPTS="-march=rv32i_zicsr_zifencei -mabi=ilp32"; \
+    install -d "${RISCV_TESTS_ISA_DIR}"; \
     \
-    # RV64I(+Zicsr,+Zifencei)
+    # ---- RV32 ----
     make -C isa clean; \
-    make -C isa -j"$(nproc)" \
-      XLEN=64 \
-      RISCV_PREFIX=riscv64-unknown-elf- \
-      RISCV_GCC_OPTS="-march=rv64i_zicsr_zifencei -mabi=lp64"; \
+    make -C isa -j"$(nproc)" XLEN=32 RISCV_PREFIX=riscv32-unknown-elf-; \
+    find isa -maxdepth 1 -type f -name 'rv32ui-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ; \
+    find isa -maxdepth 1 -type f -name 'rv32mi-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ; \
     \
-    install -d /opt/riscv-tests-install/share/riscv-tests/isa; \
-    find isa -maxdepth 1 -type f -name 'rv32ui-p-*' ! -name '*.dump' -exec cp -a {} /opt/riscv-tests-install/share/riscv-tests/isa/ \; ; \
-    find isa -maxdepth 1 -type f -name 'rv32mi-p-*' ! -name '*.dump' -exec cp -a {} /opt/riscv-tests-install/share/riscv-tests/isa/ \; ; \
-    find isa -maxdepth 1 -type f -name 'rv64ui-p-*' ! -name '*.dump' -exec cp -a {} /opt/riscv-tests-install/share/riscv-tests/isa/ \; ; \
-    find isa -maxdepth 1 -type f -name 'rv64mi-p-*' ! -name '*.dump' -exec cp -a {} /opt/riscv-tests-install/share/riscv-tests/isa/ \; ; \
-    cd /; rm -rf /tmp/riscv-tests
+    # ---- RV64 ----
+    make -C isa clean; \
+    make -C isa -j"$(nproc)" XLEN=64 RISCV_PREFIX=riscv64-unknown-elf-; \
+    find isa -maxdepth 1 -type f -name 'rv64ui-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ; \
+    find isa -maxdepth 1 -type f -name 'rv64mi-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ; \
+    \
+    rm -rf /tmp/riscv-tests
 
 ############################
 # runtime
@@ -82,6 +83,7 @@ RUN set -eux; \
 FROM ubuntu:24.04 AS runtime
 ARG DEBIAN_FRONTEND=noninteractive
 ARG RISCV=/opt/riscv
+ARG RISCV_TESTS_INSTALL=/opt/riscv-tests-install
 
 ENV RISCV="${RISCV}"
 ENV PATH="${RISCV}/bin:${PATH}"
@@ -90,12 +92,15 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates python3; \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      python3; \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/riscv /opt/riscv
-COPY --from=builder /opt/riscv-tests-install /opt/riscv-tests-install
+COPY --from=builder ${RISCV_TESTS_INSTALL} ${RISCV_TESTS_INSTALL}
 
+# tools
 COPY bin2hex.py /usr/local/bin/bin2hex.py
 COPY export_riscv_tests.sh /usr/local/bin/export_riscv_tests.sh
 
