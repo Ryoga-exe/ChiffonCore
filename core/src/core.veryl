@@ -398,25 +398,33 @@ module core (
     }
 
     // ====================================================
-    // * Registers
+    // * WB Stage
     // ====================================================
+    let wbs_valid    : logic    = wbq_rvalid;
+    let wbs_pc       : Addr     = wbq_rdata.addr;
+    let wbs_inst_bits: Inst     = wbq_rdata.bits;
+    let wbs_ctrl     : InstCtrl = wbq_rdata.ctrl;
+    let wbs_imm      : UIntX    = wbq_rdata.imm;
 
-    let rd_addr: logic<5> = ids_inst_bits[11:7];
-    let wb_data: UIntX    = switch {
-        ids_ctrl.is_lui : ids_imm,
-        ids_ctrl.is_jump: ids_pc + 4,
-        ids_ctrl.is_load: memu_rdata,
-        ids_ctrl.is_csr : csru_rdata,
-        default         : exs_alu_result,
+    let wbs_rd_addr: logic<5> = wbs_inst_bits[11:7];
+    let wbs_wb_data: UIntX    = switch {
+        wbs_ctrl.is_lui : wbs_imm,
+        wbs_ctrl.is_jump: wbs_pc + 4,
+        wbs_ctrl.is_load: wbq_rdata.mem_rdata,
+        wbs_ctrl.is_csr : wbq_rdata.csr_rdata,
+        default         : wbq_rdata.alu_result,
     };
 
     always_ff {
-        // write back
-        if ids_valid && if_fifo_rready && ids_ctrl.rwb_en {
-            regfile[rd_addr] = wb_data;
+        if wbs_valid && wbs_ctrl.rwb_en {
+            regfile[wbs_rd_addr] = wbs_wb_data;
         }
     }
 
+    always_comb {
+        // WB -> END
+        wbq_rready = 1;
+    }
 
     // ====================================================
     // * Debug
@@ -442,7 +450,7 @@ module core (
                 $display("  mem stall : %b", memu_stall);
                 $display("  mem rdata : %h", memu_rdata);
                 if if_fifo_rready && ids_ctrl.rwb_en {
-                    $display("  reg[%d] <= %h", rd_addr, wb_data);
+                    $display("  reg[%d] <= %h", wbs_rd_addr, wbs_wb_data);
                 }
                 if inst_is_br(ids_ctrl) {
                     $display("  br take   : %b", exs_brunit_take);
