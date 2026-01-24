@@ -253,8 +253,8 @@ module core (
     var regfile: UIntX<32>;
 
     // register number
-    let exs_rs1_addr: logic<5> = ids_inst_bits[19:15];
-    let exs_rs2_addr: logic<5> = ids_inst_bits[24:20];
+    let exs_rs1_addr: logic<5> = exs_inst_bits[19:15];
+    let exs_rs2_addr: logic<5> = exs_inst_bits[24:20];
 
     // source register data
     let exs_rs1_data: UIntX = if exs_rs1_addr == 0 ? 0 : regfile[exs_rs1_addr];
