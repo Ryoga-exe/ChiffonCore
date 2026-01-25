@@ -35,6 +35,8 @@ package eei {
         MTVEC = 12'h305,
         MEPC = 12'h341,
         MCAUSE = 12'h342,
+        // User defined
+        LED = 12'h800,
     }
 
     enum CsrCause: UIntX {
