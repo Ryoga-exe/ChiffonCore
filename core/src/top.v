@@ -4,8 +4,8 @@ module top #(
     parameter integer C_M_AXI_DATA_WIDTH      = 64,
     parameter integer C_M_AXI_AWUSER_WIDTH    = 1,
     parameter integer C_M_AXI_ARUSER_WIDTH    = 1,
-    parameter integer C_M_AXI_WUSER_WIDTH     = 4,   // Avoid Warning
-    parameter integer C_M_AXI_RUSER_WIDTH     = 4,   // Avoid Warning
+    parameter integer C_M_AXI_WUSER_WIDTH     = 8,   // Avoid Warning
+    parameter integer C_M_AXI_RUSER_WIDTH     = 8,   // Avoid Warning
     parameter integer C_M_AXI_BUSER_WIDTH     = 1,
 
     // Avoid compile errors
