@@ -8,7 +8,6 @@ set part "xczu3eg-sbva484-1-i"
 set scripts_dir [file dirname [file normalize [info script]]]
 
 create_project $project_name $project_dir -part $part -force
-set_property BOARD_PART avnet.com:ultra96v2:part0:1.2 [current_project]
 
 # --- IP Registry ---------------------------------------
 set repo_list [list \
