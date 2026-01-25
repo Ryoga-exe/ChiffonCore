@@ -1,5 +1,6 @@
 import eei::*;
 import corectrl::*;
+import pipeline::*;
 
 module core (
     clk     : input   clock                                    ,
@@ -10,11 +11,7 @@ module core (
     // ====================================================
     // * FIFO
     // ====================================================
-    struct if_fifo_type {
-        addr: Addr,
-        bits: Inst,
-    }
-
+    // IF -> ID
     var if_fifo_wready    : logic       ;
     var if_fifo_wready_two: logic       ;
     var if_fifo_wvalid    : logic       ;
@@ -22,7 +19,84 @@ module core (
     var if_fifo_rready    : logic       ;
     var if_fifo_rvalid    : logic       ;
     var if_fifo_rdata     : if_fifo_type;
+    // ID -> EX
+    var exq_wready: logic   ;
+    var exq_wvalid: logic   ;
+    var exq_wdata : exq_type;
+    var exq_rready: logic   ;
+    var exq_rvalid: logic   ;
+    var exq_rdata : exq_type;
+    // EX -> MEM
+    var memq_wready: logic    ;
+    var memq_wvalid: logic    ;
+    var memq_wdata : memq_type;
+    var memq_rready: logic    ;
+    var memq_rvalid: logic    ;
+    var memq_rdata : memq_type;
+    // MEM -> WB
+    var wbq_wready: logic   ;
+    var wbq_wvalid: logic   ;
+    var wbq_wdata : wbq_type;
+    var wbq_rready: logic   ;
+    var wbq_rvalid: logic   ;
+    var wbq_rdata : wbq_type;
 
+    inst id_ex_fifo: fifo #(
+        DATA_TYPE: exq_type,
+        WIDTH    : 1       ,
+    ) (
+        clk                   ,
+        rst                   ,
+        flush : control_hazard,
+        wready: exq_wready    ,
+        wvalid: exq_wvalid    ,
+        wdata : exq_wdata     ,
+        rready: exq_rready    ,
+        rvalid: exq_rvalid    ,
+        rdata : exq_rdata     ,
+    );
+    inst ex_mem_fifo: fifo #(
+        DATA_TYPE: memq_type,
+        WIDTH    : 1        ,
+    ) (
+        clk                   ,
+        rst                   ,
+        flush : control_hazard,
+        wready: memq_wready   ,
+        wvalid: memq_wvalid   ,
+        wdata : memq_wdata    ,
+        rready: memq_rready   ,
+        rvalid: memq_rvalid   ,
+        rdata : memq_rdata    ,
+    );
+    inst mem_wb_fifo: fifo #(
+        DATA_TYPE: wbq_type,
+        WIDTH    : 1       ,
+    ) (
+        clk               ,
+        rst               ,
+        flush : 0         ,
+        wready: wbq_wready,
+        wvalid: wbq_wvalid,
+        wdata : wbq_wdata ,
+        rready: wbq_rready,
+        rvalid: wbq_rvalid,
+        rdata : wbq_rdata ,
+    );
+
+    // ====================================================
+    // * IF Stage
+    // ====================================================
+    var if_pc          : Addr ; // program counter
+    var if_is_requested: logic; // fetch 中か
+    var if_pc_requested: Addr ; // 要求アドレス
+
+    let if_pc_next: Addr = if_pc + 4;
+
+    var control_hazard        : logic;
+    var control_hazard_pc_next: Addr ;
+
+    // FIFO
     inst if_fifo: fifo #(
         DATA_TYPE: if_fifo_type,
         WIDTH    : 3           ,
@@ -39,48 +113,13 @@ module core (
         rdata     : if_fifo_rdata     ,
     );
 
-    always_ff {
-        if_reset {
-            if_fifo_wvalid = 0;
-            if_fifo_wdata  = 0;
-        } else {
-            if control_hazard {
-                if_fifo_wvalid = 0;
-            } else {
-                if if_is_requested && i_membus.rvalid {
-                    if_fifo_wvalid     = 1;
-                    if_fifo_wdata.addr = if_pc_requested;
-                    if_fifo_wdata.bits = i_membus.rdata;
-                } else {
-                    if if_fifo_wvalid && if_fifo_wready {
-                        // FIFO にデータを格納できる
-                        if_fifo_wvalid = 0;
-                    }
-                }
-            }
-        }
-    }
-
-    // ====================================================
-    // * Instruction Fetch
-    // ====================================================
-    var if_pc          : Addr ; // program counter
-    var if_is_requested: logic; // fetch 中か
-    var if_pc_requested: Addr ; // 要求アドレス
-
-    let if_pc_next: Addr = if_pc + 4;
-
-    var control_hazard        : logic;
-    var control_hazard_pc_next: Addr ;
-
+    // fetch
     always_comb {
         // FIFO に 2 個以上空きがあるとき fetch
         i_membus.valid = if_fifo_wready_two;
         i_membus.addr  = if_pc;
         i_membus.wen   = 0;
         i_membus.wdata = 'x; // no use
-
-        if_fifo_rready = !memu_stall; // memunit が処理中でないとき、FIFO から命令を取り出す
     }
 
     always_ff {
@@ -112,153 +151,244 @@ module core (
         }
     }
 
-    assign control_hazard         = inst_valid && (csru_raise_trap || inst_ctrl.is_jump || inst_is_br(inst_ctrl) && brunit_take);
-    assign control_hazard_pc_next = switch {
-        csru_raise_trap      : csru_trap_vector, // jump trap_vector when traps
-        inst_is_br(inst_ctrl): inst_pc + inst_imm,
-        default              : alu_result & ~1
-    };
-
-    // ====================================================
-    // * Instruction Decoder
-    // ====================================================
-    let inst_valid : logic    = if_fifo_rvalid;
-    let inst_pc    : Addr     = if_fifo_rdata.addr;
-    let inst_bits  : Inst     = if_fifo_rdata.bits;
-    var inst_is_new: logic   ; // Whether the instruction was issued in the current clock cycle
-    var inst_ctrl  : InstCtrl;
-    var inst_imm   : UIntX   ;
-
-    inst decoder: inst_decoder (
-        bits: inst_bits,
-        ctrl: inst_ctrl,
-        imm : inst_imm ,
-    );
-
+    // IF FIFO
     always_ff {
         if_reset {
-            inst_is_new = 0;
+            if_fifo_wvalid = 0;
+            if_fifo_wdata  = 0;
         } else {
-            inst_is_new = if if_fifo_rvalid ? if_fifo_rready : 1;
+            if control_hazard {
+                if_fifo_wvalid = 0;
+            } else {
+                if if_is_requested && i_membus.rvalid {
+                    if_fifo_wvalid     = 1;
+                    if_fifo_wdata.addr = if_pc_requested;
+                    if_fifo_wdata.bits = i_membus.rdata;
+                } else {
+                    if if_fifo_wvalid && if_fifo_wready {
+                        // FIFO にデータを格納できる
+                        if_fifo_wvalid = 0;
+                    }
+                }
+            }
         }
     }
 
     // ====================================================
-    // * Registers
+    // * ID Stage
     // ====================================================
+    let ids_valid    : logic    = if_fifo_rvalid;
+    let ids_pc       : Addr     = if_fifo_rdata.addr;
+    let ids_inst_bits: Inst     = if_fifo_rdata.bits;
+    var ids_ctrl     : InstCtrl;
+    var ids_imm      : UIntX   ;
+
+    inst decoder: inst_decoder (
+        bits: ids_inst_bits,
+        ctrl: ids_ctrl     ,
+        imm : ids_imm      ,
+    );
+
+    always_comb {
+        // ID -> EX
+        if_fifo_rready = exq_wready;
+        exq_wvalid     = if_fifo_rvalid;
+        exq_wdata.addr = if_fifo_rdata.addr;
+        exq_wdata.bits = if_fifo_rdata.bits;
+        exq_wdata.ctrl = ids_ctrl;
+        exq_wdata.imm  = ids_imm;
+    }
+
+    // ====================================================
+    // * EX Stage
+    // ====================================================
+    let exs_valid    : logic    = exq_rvalid;
+    let exs_pc       : Addr     = exq_rdata.addr;
+    let exs_inst_bits: Inst     = exq_rdata.bits;
+    let exs_ctrl     : InstCtrl = exq_rdata.ctrl;
+    let exs_imm      : UIntX    = exq_rdata.imm;
+
+    // Registers
     var regfile: UIntX<32>;
 
     // register number
-    let rs1_addr: logic<5> = inst_bits[19:15];
-    let rs2_addr: logic<5> = inst_bits[24:20];
+    let exs_rs1_addr: logic<5> = exs_inst_bits[19:15];
+    let exs_rs2_addr: logic<5> = exs_inst_bits[24:20];
 
     // source register data
-    let rs1_data: UIntX = if rs1_addr == 0 ? 0 : regfile[rs1_addr];
-    let rs2_data: UIntX = if rs2_addr == 0 ? 0 : regfile[rs2_addr];
+    let exs_rs1_data: UIntX = if exs_rs1_addr == 0 ? 0 : regfile[exs_rs1_addr];
+    let exs_rs2_data: UIntX = if exs_rs2_addr == 0 ? 0 : regfile[exs_rs2_addr];
 
-    let rd_addr: logic<5> = inst_bits[11:7];
-    let wb_data: UIntX    = switch {
-        inst_ctrl.is_lui : inst_imm,
-        inst_ctrl.is_jump: inst_pc + 4,
-        inst_ctrl.is_load: memu_rdata,
-        inst_ctrl.is_csr : csru_rdata,
-        default          : alu_result,
-    };
+    // Data Hazerd
+    let exs_mem_data_hazard: logic = mems_valid && mems_ctrl.rwb_en && (mems_rd_addr == exs_rs1_addr || mems_rd_addr == exs_rs2_addr);
+    let exs_wb_data_hazard : logic = wbs_valid && wbs_ctrl.rwb_en && (wbs_rd_addr == exs_rs1_addr || wbs_rd_addr == exs_rs2_addr);
+    let exs_data_hazard    : logic = exs_mem_data_hazard || exs_wb_data_hazard;
 
-    always_ff {
-        // write back
-        if inst_valid && if_fifo_rready && inst_ctrl.rwb_en {
-            regfile[rd_addr] = wb_data;
-        }
-    }
-
-    // ====================================================
-    // * ALU
-    // ====================================================
-    var op1       : UIntX;
-    var op2       : UIntX;
-    var alu_result: UIntX;
+    // ALU
+    var exs_op1       : UIntX;
+    var exs_op2       : UIntX;
+    var exs_alu_result: UIntX;
 
     always_comb {
-        case inst_ctrl.itype {
+        case exs_ctrl.itype {
             InstType::R, InstType::B: {
-                op1 = rs1_data;
-                op2 = rs2_data;
+                exs_op1 = exs_rs1_data;
+                exs_op2 = exs_rs2_data;
             }
             InstType::I, InstType::S: {
-                op1 = rs1_data;
-                op2 = inst_imm;
+                exs_op1 = exs_rs1_data;
+                exs_op2 = exs_imm;
             }
             InstType::U, InstType::J: {
-                op1 = inst_pc;
-                op2 = inst_imm;
+                exs_op1 = exs_pc;
+                exs_op2 = exs_imm;
             }
             default: {
-                op1 = 'x;
-                op2 = 'x;
+                exs_op1 = 'x;
+                exs_op2 = 'x;
             }
         }
     }
 
     inst alum: alu (
-        ctrl  : inst_ctrl ,
-        op1               ,
-        op2               ,
-        result: alu_result,
+        ctrl  : exs_ctrl      ,
+        op1   : exs_op1       ,
+        op2   : exs_op2       ,
+        result: exs_alu_result,
     );
 
+    // Bru
+    var exs_brunit_take: logic;
+
+    inst bru: brunit (
+        funct3: exs_ctrl.funct3,
+        op1   : exs_op1        ,
+        op2   : exs_op2        ,
+        take  : exs_brunit_take,
+    );
+
+    always_comb {
+        // EX -> MEM
+        exq_rready            = memq_wready && !exs_data_hazard;
+        memq_wvalid           = exq_rvalid && !exs_data_hazard;
+        memq_wdata.addr       = exq_rdata.addr;
+        memq_wdata.bits       = exq_rdata.bits;
+        memq_wdata.ctrl       = exq_rdata.ctrl;
+        memq_wdata.imm        = exq_rdata.imm;
+        memq_wdata.rs1_addr   = exs_rs1_addr;
+        memq_wdata.rs1_data   = exs_rs1_data;
+        memq_wdata.rs2_data   = exs_rs2_data;
+        memq_wdata.alu_result = exs_alu_result;
+        memq_wdata.br_taken   = exs_ctrl.is_jump || inst_is_br(exs_ctrl) && exs_brunit_take;
+        memq_wdata.jump_addr  = if inst_is_br(exs_ctrl) ? exs_pc + exs_imm : exs_alu_result & ~1;
+    }
+
     // ====================================================
-    // * Memory
+    // * MEM Stage
     // ====================================================
+    var mems_is_new   : logic      ;
+    let mems_valid    : logic       = memq_rvalid;
+    let mems_pc       : Addr        = memq_rdata.addr;
+    let mems_inst_bits: Inst        = memq_rdata.bits;
+    let mems_ctrl     : InstCtrl    = memq_rdata.ctrl;
+    let mems_rd_addr  : logic   <5> = mems_inst_bits[11:7];
+
+    assign control_hazard         = mems_valid && (csru_raise_trap || mems_ctrl.is_jump || memq_rdata.br_taken);
+    assign control_hazard_pc_next = if csru_raise_trap ? csru_trap_vector : memq_rdata.jump_addr;
+
+    always_ff {
+        if_reset {
+            mems_is_new = 0;
+        } else {
+            if memq_rvalid {
+                mems_is_new = memq_rready;
+            } else {
+                mems_is_new = 1;
+            }
+        }
+    }
+
+    // Memory
     var memu_rdata: UIntX;
     var memu_stall: logic;
 
     inst memu: memunit (
-        clk                ,
-        rst                ,
-        valid : inst_valid ,
-        is_new: inst_is_new,
-        ctrl  : inst_ctrl  ,
-        addr  : alu_result ,
-        rs2   : rs2_data   ,
-        rdata : memu_rdata ,
-        stall : memu_stall ,
-        membus: d_membus   ,
+        clk                          ,
+        rst                          ,
+        valid : mems_valid           ,
+        is_new: mems_is_new          ,
+        ctrl  : mems_ctrl            ,
+        addr  : memq_rdata.alu_result,
+        rs2   : memq_rdata.rs2_data  ,
+        rdata : memu_rdata           ,
+        stall : memu_stall           ,
+        membus: d_membus             ,
     );
 
-    // ====================================================
-    // * Brunit
-    // ====================================================
-    var brunit_take: logic;
-
-    inst bru: brunit (
-        funct3: inst_ctrl.funct3,
-        op1                     ,
-        op2                     ,
-        take  : brunit_take     ,
-    );
-
-    // ====================================================
-    // * CSR
-    // ====================================================
+    // CSR
     var csru_rdata      : UIntX;
     var csru_raise_trap : logic;
     var csru_trap_vector: Addr ;
 
     inst csru: csrunit (
-        clk                       ,
-        rst                       ,
-        valid   : inst_valid      ,
-        pc      : inst_pc         ,
-        ctrl    : inst_ctrl       ,
-        rd_addr                   ,
-        csr_addr: inst_bits[31:20],
-        rs1     : if inst_ctrl.funct3[2] == 1 && inst_ctrl.funct3[1:0] != 0 ? {1'b0 repeat XLEN - $bits(rs1_addr), rs1_addr} // expand rs1 with 0
-         : rs1_data,
-        rdata      : csru_rdata                                                                                                           ,
-        raise_trap : csru_raise_trap                                                                                                      ,
-        trap_vector: csru_trap_vector                                                                                                     ,
+        clk                            ,
+        rst                            ,
+        valid   : mems_valid           ,
+        pc      : mems_pc              ,
+        ctrl    : mems_ctrl            ,
+        rd_addr : mems_rd_addr         ,
+        csr_addr: mems_inst_bits[31:20],
+        rs1     : if mems_ctrl.funct3[2] == 1 && mems_ctrl.funct3[1:0] != 0 ?
+            {1'b0 repeat XLEN - $bits(memq_rdata.rs1_addr), memq_rdata.rs1_addr} // expand rs1 with 0
+        :
+            memq_rdata.rs1_data
+        ,
+        rdata      : csru_rdata      ,
+        raise_trap : csru_raise_trap ,
+        trap_vector: csru_trap_vector,
     );
+
+    always_comb {
+        // MEM -> WB
+        memq_rready          = wbq_wready && !memu_stall;
+        wbq_wvalid           = memq_rvalid && !memu_stall;
+        wbq_wdata.addr       = memq_rdata.addr;
+        wbq_wdata.bits       = memq_rdata.bits;
+        wbq_wdata.ctrl       = memq_rdata.ctrl;
+        wbq_wdata.imm        = memq_rdata.imm;
+        wbq_wdata.alu_result = memq_rdata.alu_result;
+        wbq_wdata.mem_rdata  = memu_rdata;
+        wbq_wdata.csr_rdata  = csru_rdata;
+    }
+
+    // ====================================================
+    // * WB Stage
+    // ====================================================
+    let wbs_valid    : logic    = wbq_rvalid;
+    let wbs_pc       : Addr     = wbq_rdata.addr;
+    let wbs_inst_bits: Inst     = wbq_rdata.bits;
+    let wbs_ctrl     : InstCtrl = wbq_rdata.ctrl;
+    let wbs_imm      : UIntX    = wbq_rdata.imm;
+
+    let wbs_rd_addr: logic<5> = wbs_inst_bits[11:7];
+    let wbs_wb_data: UIntX    = switch {
+        wbs_ctrl.is_lui : wbs_imm,
+        wbs_ctrl.is_jump: wbs_pc + 4,
+        wbs_ctrl.is_load: wbq_rdata.mem_rdata,
+        wbs_ctrl.is_csr : wbq_rdata.csr_rdata,
+        default         : wbq_rdata.alu_result,
+    };
+
+    always_ff {
+        if wbs_valid && wbs_ctrl.rwb_en {
+            regfile[wbs_rd_addr] = wbs_wb_data;
+        }
+    }
+
+    always_comb {
+        // WB -> END
+        wbq_rready = 1;
+    }
 
     // ====================================================
     // * Debug
@@ -269,30 +399,51 @@ module core (
         if_reset {
             clock_count = 1;
         } else {
-            clock_count += 1;
+            clock_count = clock_count + 1;
 
-            if inst_valid {
-                $display("# %d", clock_count);
-                $display("%h : %h", inst_pc, inst_bits);
-                $display("  itype   : %b", inst_ctrl.itype);
-                $display("  imm     : %h", inst_imm);
-                $display("  rs1[%d] : %h", rs1_addr, rs1_data);
-                $display("  rs2[%d] : %h", rs2_addr, rs2_data);
-                $display("  op1     : %h", op1);
-                $display("  op2     : %h", op2);
-                $display("  alu_res : %h", alu_result);
+            $display("");
+            $display("# %d", clock_count);
+
+            $display("IF ------");
+            $display("     pc : %h", if_pc);
+            $display(" is req : %b", if_is_requested);
+            $display(" pc req : %h", if_pc_requested);
+            $display("ID ------");
+            if ids_valid {
+                $display("  %h : %h", ids_pc, if_fifo_rdata.bits);
+                $display("  itype : %b", ids_ctrl.itype);
+                $display("  imm   : %h", ids_imm);
+            }
+            $display("EX -----");
+            if exs_valid {
+                $display("  %h : %h", exq_rdata.addr, exq_rdata.bits);
+                $display("  op1     : %h", exs_op1);
+                $display("  op2     : %h", exs_op2);
+                $display("  alu     : %h", exs_alu_result);
+                $display("  dhazard : %b", exs_data_hazard);
+                if inst_is_br(exs_ctrl) {
+                    $display("  br take : ", exs_brunit_take);
+                }
+            }
+            $display("MEM -----");
+            if mems_valid {
+                $display("  %h : %h", memq_rdata.addr, memq_rdata.bits);
                 $display("  mem stall : %b", memu_stall);
                 $display("  mem rdata : %h", memu_rdata);
-                if if_fifo_rready && inst_ctrl.rwb_en {
-                    $display("  reg[%d] <= %h", rd_addr, wb_data);
-                }
-                if inst_is_br(inst_ctrl) {
-                    $display("  br take   : %b", brunit_take);
-                }
-                if inst_ctrl.is_csr {
+                if mems_ctrl.is_csr {
                     $display("  csr rdata : %h", csru_rdata);
                     $display("  csr trap  : %b", csru_raise_trap);
                     $display("  csr vec   : %h", csru_trap_vector);
+                }
+                if memq_rdata.br_taken {
+                    $display("  JUMP TO   : %h", memq_rdata.jump_addr);
+                }
+            }
+            $display("WB ----");
+            if wbs_valid {
+                $display("  %h : %h", wbq_rdata.addr, wbq_rdata.bits);
+                if wbs_ctrl.rwb_en {
+                    $display("  reg[%d] <= %h", wbs_rd_addr, wbs_wb_data);
                 }
             }
         }

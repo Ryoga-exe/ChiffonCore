@@ -1,7 +1,7 @@
 module membus_axi_master #(
     param AXI_ID_W  : u32 = 1 ,
     param AXI_ADDR_W: u32 = 32,
-    param AXI_DATA_W: u32 = 32,
+    param AXI_DATA_W: u32 = 64,
 
     param DATA_WIDTH: u32 = 64,
     param ADDR_WIDTH: u32 = 32, // NOTE: consider
