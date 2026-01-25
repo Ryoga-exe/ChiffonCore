@@ -79,6 +79,9 @@ module top #(
     input  wire UART_RX,  // J5 pin5
     output wire UART_TX,  // J5 pin7
 
+    // LED
+    output wire [7:0] LED,
+
     // Register bus
     input  wire [16-1:0] WRADDR,
     input  wire [ 4-1:0] BYTEEN,
@@ -147,6 +150,8 @@ module top #(
   wire        mem_rvalid;
   wire [63:0] mem_rdata;
 
+  wire [63:0] csr_led;
+
   // NOTE: `core_port` is provided as Veryl wrapper (core_port.veryl).
   // It exposes the membus signals as plain ports (no SV interface on top-level).
   core_port u_core (
@@ -159,7 +164,8 @@ module top #(
       .mem_wdata (mem_wdata),
       .mem_wmask (mem_wmask),
       .mem_rvalid(mem_rvalid),
-      .mem_rdata (mem_rdata)
+      .mem_rdata (mem_rdata),
+      .led       (csr_led)
   );
 
   //-------------------------------------------------------------------------
@@ -233,6 +239,9 @@ module top #(
   );
 
   assign DEBUG = last_pc;
+
+  // CSR 0x800 (eei::CsrAddr::LED) -> external LEDs (lower 8 bits)
+  assign LED = csr_led[7:0];
 
   //-------------------------------------------------------------------------
   // AXI user fields are unused for now (tie to 0)
