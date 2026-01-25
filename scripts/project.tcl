@@ -33,6 +33,7 @@ update_ip_catalog
 # --- Add RTL Sources (core as module-ref, not packaged IP) ---
 # Veryl output
 add_files -fileset sources_1 [glob -nocomplain core/target/*.sv]
+add_files -fileset sources_1 [glob -nocomplain core/target/**/*.sv]
 # Verilog top wrapper (module name: top)
 add_files -fileset sources_1 core/target/top.v
 update_compile_order -fileset sources_1
