@@ -18,7 +18,7 @@ current_bd_design [get_bd_designs design_1]
 
 # Enable HP1 on PS
 set ps [get_bd_cells zynq_ultra_ps_e_0]
-set_property -dict [list CONFIG.PSU__USE__S_AXI_HP1 {1}] $ps
+set_property -dict [list CONFIG.PSU__USE__S_AXI_GP3 {1}] $ps
 
 # --------------------------------------------------------
 # 1) Add core as module reference
