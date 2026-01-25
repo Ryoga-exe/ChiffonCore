@@ -40,6 +40,15 @@ if {[llength [get_bd_cells -quiet smartconnect_core]] == 0} {
 }
 
 # Interface connections
+
+connect_bd_net \
+  [get_bd_pins zynq_ultra_ps_e_0/pl_clk0] \
+  [get_bd_pins zynq_ultra_ps_e_0/saxihp1_fpd_aclk]
+
+# connect_bd_net \
+#   [get_bd_pins rst_ps8_0_125M/peripheral_aresetn] \
+#   [get_bd_pins zynq_ultra_ps_e_0/saxihp1_fpd_aresetn]
+
 # core_0 M_AXI -> smartconnect_core S00_AXI
 connect_bd_intf_net -quiet \
   [get_bd_intf_pins core_0/M_AXI] \
@@ -134,6 +143,8 @@ if {[llength [get_bd_pins -quiet core_0/UART_RX]] != 0} {
       [get_bd_pins xlconstant_uart_rx/dout] \
       [get_bd_pins core_0/UART_RX]
 }
+
+assign_bd_address
 
 # Done
 validate_bd_design
