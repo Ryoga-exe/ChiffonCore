@@ -14,16 +14,17 @@ package corectrl {
 
     /// Struct for flags and used for control
     struct InstCtrl {
-        itype   : InstType   , // type of operation
-        rwb_en  : logic      , // write registers?
-        is_lui  : logic      , // is LUI inst?
-        is_aluop: logic      , // use ALU?
-        is_op32 : logic      , // OP-32 or OP-IMM-32?
-        is_jump : logic      , // is jump inst?
-        is_load : logic      , // is load inst?
-        is_csr  : logic      , // is CSR inst?
-        funct3  : logic   <3>, // funct3 field in inst
-        funct7  : logic   <7>, // funct7 field in inst
+        itype    : InstType   , // type of operation
+        rwb_en   : logic      , // write registers?
+        is_lui   : logic      , // is LUI inst?
+        is_aluop : logic      , // use ALU?
+        is_muldiv: logic      , // M-extended inst?
+        is_op32  : logic      , // OP-32 or OP-IMM-32?
+        is_jump  : logic      , // is jump inst?
+        is_load  : logic      , // is load inst?
+        is_csr   : logic      , // is CSR inst?
+        funct3   : logic   <3>, // funct3 field in inst
+        funct7   : logic   <7>, // funct7 field in inst
     }
 
     /// Determines whether an instruction accesses memory
