@@ -14,6 +14,7 @@ module csrunit (
     rdata      : output UIntX       , /// Result of reading the CSR by the CSR instruction
     raise_trap : output logic       , /// 1 when raise trap
     trap_vector: output Addr        , /// Address to jump to when an exception occurs
+    led        : output UIntX       , // LED
 ) {
     // CSRR(W|S|C)[I] inst?
     let is_wsc: logic = ctrl.is_csr && ctrl.funct3[1:0] != 0;
@@ -26,6 +27,7 @@ module csrunit (
     const MTVEC_WMASK : UIntX = 'hffff_ffff_ffff_fffc;
     const MEPC_WMASK  : UIntX = 'hffff_ffff_ffff_fffc;
     const MCAUSE_WMASK: UIntX = 'hffff_ffff_ffff_ffff;
+    const LED_WMASK   : UIntX = 'hffff_ffff_ffff_ffff;
 
     // CSR
     var mtvec : UIntX;
@@ -41,6 +43,7 @@ module csrunit (
             CsrAddr::MTVEC : mtvec,
             CsrAddr::MEPC  : mepc,
             CsrAddr::MCAUSE: mcause,
+            CsrAddr::LED   : led,
             default        : 'x,
         };
         // write
@@ -48,6 +51,7 @@ module csrunit (
             CsrAddr::MTVEC : MTVEC_WMASK,
             CsrAddr::MEPC  : MEPC_WMASK,
             CsrAddr::MCAUSE: MCAUSE_WMASK,
+            CsrAddr::LED   : LED_WMASK,
             default        : 0,
         };
         wdata = case ctrl.funct3[1:0] {
@@ -63,6 +67,7 @@ module csrunit (
             mtvec  = 0;
             mepc   = 0;
             mcause = 0;
+            led    = 0;
         } else {
             if valid {
                 if raise_trap {
@@ -76,6 +81,7 @@ module csrunit (
                             CsrAddr::MTVEC : mtvec  = wdata;
                             CsrAddr::MEPC  : mepc   = wdata;
                             CsrAddr::MCAUSE: mcause = wdata;
+                            CsrAddr::LED   : led    = wdata;
                             default        : {}
                         }
                     }
