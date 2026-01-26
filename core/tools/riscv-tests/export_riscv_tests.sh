@@ -11,6 +11,7 @@ shopt -s nullglob
 for f in \
   "$SRC"/rv32ui-p-* "$SRC"/rv32mi-p-* \
   "$SRC"/rv64ui-p-* "$SRC"/rv64mi-p-* \
+  "$SRC"/rv64um-p-* "$SRC"/rv64um-p-* \
 ; do
   case "$f" in
     *.dump|*.hex|*.bin|*.elf|*.o|*.S|*.ld) continue ;;
