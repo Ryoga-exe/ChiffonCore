@@ -36,6 +36,8 @@ add_files -fileset sources_1 [glob -nocomplain core/target/*.sv]
 add_files -fileset sources_1 [glob -nocomplain core/target/**/*.sv]
 # Verilog top wrapper (module name: top)
 add_files -fileset sources_1 core/target/top.v
+# Boot ROM
+add_files -fileset sources_1 core/bootrom.hex
 update_compile_order -fileset sources_1
 
 # --- Create Block Design (base: bd_base.tcl, then patch in core) ---
