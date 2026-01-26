@@ -12,7 +12,7 @@ module tb_riscv_tests;
   localparam integer STEP = 8;
 
   // default hex (override with +HEX=xxx.hex)
-  localparam string MEMDATA_DEFAULT = "rv32ui-p-add.hex";
+  localparam string MEMDATA_DEFAULT = "rv64ui-p-add.hex";
 
   // memory base used by VIP backdoor
   localparam logic [31:0] MEMBASE_DEFAULT = 32'h2000_0000;
@@ -229,6 +229,7 @@ module tb_riscv_tests;
     ENTRYPC         = 32'h0000_0000;
     TOHOST_CPU_ADDR = TOHOST_CPU_ADDR_DEFAULT;
 
+    CPU_RAM_BASE    = CPU_RAM_BASE_DEFAULT;
     void'($value$plusargs("HEX=%s", MEMDATA));
     void'($value$plusargs("TIMEOUT=%d", TIMEOUT));
     void'($value$plusargs("MEMBASE=%h", MEMBASE));
