@@ -179,16 +179,18 @@ module core (
     // ====================================================
     // * ID Stage
     // ====================================================
-    let ids_valid    : logic    = if_fifo_rvalid;
-    let ids_pc       : Addr     = if_fifo_rdata.addr;
-    let ids_inst_bits: Inst     = if_fifo_rdata.bits;
-    var ids_ctrl     : InstCtrl;
-    var ids_imm      : UIntX   ;
+    let ids_valid     : logic    = if_fifo_rvalid;
+    let ids_pc        : Addr     = if_fifo_rdata.addr;
+    let ids_inst_bits : Inst     = if_fifo_rdata.bits;
+    var ids_inst_valid: logic   ;
+    var ids_ctrl      : InstCtrl;
+    var ids_imm       : UIntX   ;
 
     inst decoder: inst_decoder (
-        bits: ids_inst_bits,
-        ctrl: ids_ctrl     ,
-        imm : ids_imm      ,
+        bits : ids_inst_bits ,
+        valid: ids_inst_valid,
+        ctrl : ids_ctrl      ,
+        imm  : ids_imm       ,
     );
 
     always_comb {
