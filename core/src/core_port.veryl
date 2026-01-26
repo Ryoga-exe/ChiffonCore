@@ -40,14 +40,6 @@ module core_port (
         }
     }
 
-    // NOTE: consider
-    // アドレスをデータ単位でのアドレスに変換する (必要？)
-    function addr_to_memaddr::<DATA_WIDTH: u32, ADDR_WIDTH: u32> (
-        addr: input logic<XLEN>,
-    ) -> logic<ADDR_WIDTH> {
-        return addr[$clog2(DATA_WIDTH / 8)+:ADDR_WIDTH];
-    }
-
     // core drives: bus.valid/addr/wen/wdata
     // outside drives: bus.ready/rvalid/rdata
     always_comb {
@@ -78,7 +70,7 @@ module core_port (
         // mmio <> RAM
         ram_membus_valid       = mmio_ram_membus.valid;
         mmio_ram_membus.ready  = ram_membus_ready;
-        ram_membus_addr        = mmio_ram_membus.addr; // NOTE: should I use: addr_to_memaddr::<RAM_DATA_WIDTH, RAM_ADDR_WIDTH>(mmio_ram_membus.addr); ?
+        ram_membus_addr        = mmio_ram_membus.addr;
         ram_membus_wen         = mmio_ram_membus.wen;
         ram_membus_wdata       = mmio_ram_membus.wdata;
         ram_membus_wmask       = mmio_ram_membus.wmask;
