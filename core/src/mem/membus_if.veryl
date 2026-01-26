@@ -29,7 +29,7 @@ interface membus_if::<DATA_WIDTH: u32, ADDR_WIDTH: u32> {
     // get DATA_WIDTH-bit expanded wmask
     function wmask_expand () -> logic<DATA_WIDTH> {
         var result: logic<DATA_WIDTH>;
-        for i: u32 in 0..DATA_WIDTH {
+        for i: u32               in 0..DATA_WIDTH {
             result[i] = wmask[i / 8];
         }
         return result;
