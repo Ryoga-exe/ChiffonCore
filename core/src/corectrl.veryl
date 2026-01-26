@@ -27,6 +27,12 @@ package corectrl {
         funct7   : logic   <7>, // funct7 field in inst
     }
 
+    /// Struct for exceptions
+    struct ExceptionInfo {
+        valid: logic   ,
+        cause: CsrCause,
+    }
+
     /// Determines whether an instruction accesses memory
     function inst_is_memop (
         ctrl: input InstCtrl,
