@@ -15,6 +15,7 @@ set_property BOARD_PART avnet.com:ultra96v2:part0:1.2 [current_project]
 add_files -fileset sources_1 [glob target/*.sv]
 add_files -fileset sources_1 [glob target/**/*.sv]
 add_files -fileset sources_1 target/top.v
+add_files -fileset sources_1 bootrom.hex
 update_compile_order -fileset sources_1
 
 # --- Add Testbench -------------------------------------
