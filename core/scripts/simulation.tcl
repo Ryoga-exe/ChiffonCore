@@ -15,6 +15,14 @@ set_property BOARD_PART avnet.com:ultra96v2:part0:1.2 [current_project]
 add_files -fileset sources_1 [glob target/*.sv]
 add_files -fileset sources_1 [glob target/**/*.sv]
 add_files -fileset sources_1 target/top.v
+add_files -fileset sources_1 bootrom.hex
+
+# --- Boot ROM ------------------------------------------
+set bootrom_hex "bootrom.hex"
+add_files -fileset sources_1 -norecurse $bootrom_hex
+# Mark as "Memory Initialization Files"
+set_property file_type {Memory Initialization Files} [get_files bootrom.hex]
+
 update_compile_order -fileset sources_1
 
 # --- Add Testbench -------------------------------------

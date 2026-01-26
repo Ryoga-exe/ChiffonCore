@@ -3,10 +3,10 @@ import corectrl::*;
 import pipeline::*;
 
 module core (
-    clk     : input   clock                                    ,
-    rst     : input   reset                                    ,
-    i_membus: modport membus_if::<ILEN, XLEN>::master          ,
-    d_membus: modport membus_if::<MEM_DATA_WIDTH, XLEN>::master,
+    clk     : input   clock                          ,
+    rst     : input   reset                          ,
+    i_membus: modport membus_if::<ILEN, XLEN>::master,
+    d_membus: modport Membus::master                 ,
 
     led: output UIntX,
 ) {
@@ -126,7 +126,7 @@ module core (
 
     always_ff {
         if_reset {
-            if_pc           = 0;
+            if_pc           = INITIAL_PC;
             if_is_requested = 0;
             if_pc_requested = 0;
         } else {

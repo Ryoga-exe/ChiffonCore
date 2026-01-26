@@ -36,6 +36,17 @@ add_files -fileset sources_1 [glob -nocomplain core/target/*.sv]
 add_files -fileset sources_1 [glob -nocomplain core/target/**/*.sv]
 # Verilog top wrapper (module name: top)
 add_files -fileset sources_1 core/target/top.v
+
+# --- Boot ROM ------------------------------------------------
+set bootrom_hex "core/bootrom.hex"
+if {![file exists $bootrom_hex]} {
+    puts "ERROR: bootrom.hex not found: $bootrom_hex"
+    exit 1
+}
+add_files -fileset sources_1 -norecurse $bootrom_hex
+# Mark as "Memory Initialization Files"
+set_property file_type {Memory Initialization Files} [get_files bootrom.hex]
+
 update_compile_order -fileset sources_1
 
 # --- Create Block Design (base: bd_base.tcl, then patch in core) ---

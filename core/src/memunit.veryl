@@ -3,16 +3,16 @@ import corectrl::*;
 
 /// Module that performs memory operations
 module memunit (
-    clk   : input   clock                                    ,
-    rst   : input   reset                                    ,
-    valid : input   logic                                    ,
-    is_new: input   logic                                    , // Whether a new instruction is supplied
-    ctrl  : input   InstCtrl                                 , // InstCtrl of the instruction
-    addr  : input   Addr                                     , // Address to access
-    rs2   : input   UIntX                                    , // Data to write for store instruction
-    rdata : output  UIntX                                    , // Load instruction result (valid when stall == 0)
-    stall : output  logic                                    , // Memory access instruction not completed
-    membus: modport membus_if::<MEM_DATA_WIDTH, XLEN>::master, // Interface with memory
+    clk   : input   clock         ,
+    rst   : input   reset         ,
+    valid : input   logic         ,
+    is_new: input   logic         , // Whether a new instruction is supplied
+    ctrl  : input   InstCtrl      , // InstCtrl of the instruction
+    addr  : input   Addr          , // Address to access
+    rs2   : input   UIntX         , // Data to write for store instruction
+    rdata : output  UIntX         , // Load instruction result (valid when stall == 0)
+    stall : output  logic         , // Memory access instruction not completed
+    membus: modport Membus::master, // Interface with memory
 ) {
     enum State: logic<2> {
         Init, // accepts commands
@@ -21,14 +21,14 @@ module memunit (
     }
     var state: State;
 
-    var req_wen  : logic                    ;
-    var req_addr : Addr                     ;
-    var req_wdata: logic<MEM_DATA_WIDTH>    ;
-    var req_wmask: logic<MEM_DATA_WIDTH / 8>;
+    var req_wen  : logic                       ;
+    var req_addr : Addr                        ;
+    var req_wdata: logic<MEMBUS_DATA_WIDTH>    ;
+    var req_wmask: logic<MEMBUS_DATA_WIDTH / 8>;
 
-    const W   : u32                   = XLEN;
-    let D   : logic<MEM_DATA_WIDTH> = membus.rdata;
-    let sext: logic                 = (ctrl.funct3[2] == 1'b0); // Whether to perform sign extension
+    const W   : u32                      = XLEN;
+    let D   : logic<MEMBUS_DATA_WIDTH> = membus.rdata;
+    let sext: logic                    = (ctrl.funct3[2] == 1'b0); // Whether to perform sign extension
 
     always_comb {
         // memory access

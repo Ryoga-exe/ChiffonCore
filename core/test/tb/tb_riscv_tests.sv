@@ -12,13 +12,16 @@ module tb_riscv_tests;
   localparam integer STEP = 8;
 
   // default hex (override with +HEX=xxx.hex)
-  localparam string MEMDATA_DEFAULT = "rv32ui-p-add.hex";
+  localparam string MEMDATA_DEFAULT = "rv64ui-p-add.hex";
 
   // memory base used by VIP backdoor
   localparam logic [31:0] MEMBASE_DEFAULT = 32'h2000_0000;
 
+  // CPU-side RAM base (CPU address space)
+  localparam logic [31:0] CPU_RAM_BASE_DEFAULT = 32'h8000_0000;
+
   // CPU-side tohost address (riscv-tests)
-  localparam logic [31:0] TOHOST_CPU_ADDR_DEFAULT = 32'h0000_1000;
+  localparam logic [31:0] TOHOST_CPU_ADDR_DEFAULT = (CPU_RAM_BASE_DEFAULT + 32'h0000_1000);
 
   // timeout cycles (override with +TIMEOUT=...)
   localparam integer TIMEOUT_DEFAULT = 5_000_000;
@@ -70,6 +73,7 @@ module tb_riscv_tests;
   integer                               TIMEOUT;
   logic                          [31:0] MEMBASE;
   logic                          [31:0] ENTRYPC;
+  logic                          [31:0] CPU_RAM_BASE;
   logic                          [31:0] TOHOST_CPU_ADDR;
   logic                          [31:0] PHYS_TOHOST;
 
@@ -225,13 +229,20 @@ module tb_riscv_tests;
     ENTRYPC         = 32'h0000_0000;
     TOHOST_CPU_ADDR = TOHOST_CPU_ADDR_DEFAULT;
 
+    CPU_RAM_BASE    = CPU_RAM_BASE_DEFAULT;
     void'($value$plusargs("HEX=%s", MEMDATA));
     void'($value$plusargs("TIMEOUT=%d", TIMEOUT));
     void'($value$plusargs("MEMBASE=%h", MEMBASE));
     void'($value$plusargs("ENTRY=%h", ENTRYPC));
+    void'($value$plusargs("RAMBASE=%h", CPU_RAM_BASE));
     void'($value$plusargs("TOHOST=%h", TOHOST_CPU_ADDR));
 
-    PHYS_TOHOST = MEMBASE + ENTRYPC + TOHOST_CPU_ADDR;
+    if (TOHOST_CPU_ADDR >= CPU_RAM_BASE) begin
+      PHYS_TOHOST = MEMBASE + ENTRYPC + (TOHOST_CPU_ADDR - CPU_RAM_BASE);
+    end else begin
+      // Backward-compat: low-linked tests (e.g., TOHOST=0x1000)
+      PHYS_TOHOST = MEMBASE + ENTRYPC + TOHOST_CPU_ADDR;
+    end
 
     // reset pulse
     #(STEP);

@@ -141,35 +141,41 @@ module top #(
   wire CORE_RST;
   assign CORE_RST = ARST | boot_hold_reset | ~boot_run;
 
-  wire        mem_valid;
-  wire        mem_ready;
-  wire [31:0] mem_addr;
-  wire        mem_wen;
-  wire [63:0] mem_wdata;
-  wire [ 7:0] mem_wmask;
-  wire        mem_rvalid;
-  wire [63:0] mem_rdata;
+  wire        ram_valid;
+  wire        ram_ready;
+  wire [31:0] ram_addr;
+  wire        ram_wen;
+  wire [63:0] ram_wdata;
+  wire [ 7:0] ram_wmask;
+  wire        ram_rvalid;
+  wire [63:0] ram_rdata;
+
 
   wire [63:0] csr_led;
 
   // NOTE: `core_port` is provided as Veryl wrapper (core_port.veryl).
   // It exposes the membus signals as plain ports (no SV interface on top-level).
+  // NOTE: `core_port` is provided as Veryl wrapper (core_port.veryl).
+  // It exposes the membus signals as plain ports (no SV interface on top-level).
   core_port u_core (
-      .clk       (ACLK),
-      .rst       (CORE_RST),
-      .mem_valid (mem_valid),
-      .mem_ready (mem_ready),
-      .mem_addr  (mem_addr),
-      .mem_wen   (mem_wen),
-      .mem_wdata (mem_wdata),
-      .mem_wmask (mem_wmask),
-      .mem_rvalid(mem_rvalid),
-      .mem_rdata (mem_rdata),
-      .led       (csr_led)
+      .clk(ACLK),
+      .rst(CORE_RST),
+
+      .ram_membus_valid (ram_valid),
+      .ram_membus_ready (ram_ready),
+      .ram_membus_addr  (ram_addr),
+      .ram_membus_wen   (ram_wen),
+      .ram_membus_wdata (ram_wdata),
+      .ram_membus_wmask (ram_wmask),
+      .ram_membus_rvalid(ram_rvalid),
+      .ram_membus_rdata (ram_rdata),
+
+      .led(csr_led)
   );
 
   //-------------------------------------------------------------------------
   // membus -> AXI adapter
+
   //-------------------------------------------------------------------------
   wire [31:0] last_pc;
 
@@ -184,14 +190,14 @@ module top #(
       .dram_base(boot_dram_base),
       .entry_pc (boot_entry_pc),
 
-      .mem_valid (mem_valid),
-      .mem_ready (mem_ready),
-      .mem_addr  (mem_addr),
-      .mem_wen   (mem_wen),
-      .mem_wdata (mem_wdata),
-      .mem_wmask (mem_wmask),
-      .mem_rvalid(mem_rvalid),
-      .mem_rdata (mem_rdata),
+      .mem_valid (ram_valid),
+      .mem_ready (ram_ready),
+      .mem_addr  (ram_addr),
+      .mem_wen   (ram_wen),
+      .mem_wdata (ram_wdata),
+      .mem_wmask (ram_wmask),
+      .mem_rvalid(ram_rvalid),
+      .mem_rdata (ram_rdata),
 
       .M_AXI_AWID   (M_AXI_AWID),
       .M_AXI_AWADDR (M_AXI_AWADDR),
