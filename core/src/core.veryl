@@ -514,6 +514,11 @@ module core (
                 $display("  %h : %h", ids_pc, if_fifo_rdata.bits);
                 $display("  itype : %b", ids_ctrl.itype);
                 $display("  imm   : %h", ids_imm);
+                $display("  expt  : %b", exq_wdata.expt.valid);
+                if exq_wdata.expt.valid {
+                    $display("  cause: %d", exq_wdata.expt.cause);
+                    $display("  value: %d", exq_wdata.expt.value);
+                }
             }
             $display("EX -----");
             if exs_valid {
@@ -522,6 +527,10 @@ module core (
                 $display("  op2     : %h", exs_op2);
                 $display("  alu     : %h", exs_alu_result);
                 $display("  dhazard : %b", exs_data_hazard);
+                $display("  muldiv  : %b", exs_muldiv_stall);
+                if exs_ctrl.is_muldiv && exs_muldiv_rvalid {
+                    $display("  muldiv result : %h", exs_muldiv_result);
+                }
                 if inst_is_br(exs_ctrl) {
                     $display("  br take : ", exs_brunit_take);
                 }
@@ -531,7 +540,7 @@ module core (
                 $display("  %h : %h", memq_rdata.addr, memq_rdata.bits);
                 $display("  mem stall : %b", memu_stall);
                 $display("  mem rdata : %h", memu_rdata);
-                if mems_ctrl.is_csr {
+                if mems_ctrl.is_csr || csru_raise_trap {
                     $display("  csr rdata : %h", csru_rdata);
                     $display("  csr trap  : %b", csru_raise_trap);
                     $display("  csr vec   : %h", csru_trap_vector);
