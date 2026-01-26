@@ -203,7 +203,12 @@ module core (
         exq_wdata.imm  = ids_imm;
         // exception
         exq_wdata.expt = 0; // default value
-        if ids_inst_bits == 32'h00000073 {
+        if !ids_inst_valid {
+            // illegal instruction
+            exq_wdata.expt.valid = 1;
+            exq_wdata.expt.cause = CsrCause::ILLEGAL_INSTRUCTION;
+            exq_wdata.expt.value = {1'b0 repeat XLEN - ILEN, ids_inst_bits};
+        } else if ids_inst_bits == 32'h00000073 {
             // ECALL
             exq_wdata.expt.valid = 1;
             exq_wdata.expt.cause = CsrCause::ENVIRONMENT_CALL_FROM_M_MODE;
