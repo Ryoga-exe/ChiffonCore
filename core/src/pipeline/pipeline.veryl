@@ -44,5 +44,6 @@ package pipeline {
         alu_result: UIntX   ,
         mem_rdata : UIntX   ,
         csr_rdata : UIntX   ,
+        raise_trap: logic   ,
     }
 }
