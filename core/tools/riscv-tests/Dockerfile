@@ -18,13 +18,6 @@ ENV PATH="${RISCV}/bin:${PATH}"
 
 SHELL ["/bin/bash", "-eu", "-o", "pipefail", "-c"]
 
-# --- Tools ---------------------------------------------
-COPY patch_linkld.py /usr/local/bin/patch_linkld.py
-
-# on Windows (CRLF -> LF) + perms
-RUN sed -i 's/\r$//' /usr/local/bin/patch_linkld.py; \
-    chmod +x /usr/local/bin/patch_linkld.py
-
 # --- Build dependencies --------------------------------
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -84,9 +77,6 @@ RUN git clone --recursive --depth 1 --shallow-submodules \
       https://github.com/riscv-software-src/riscv-tests /tmp/riscv-tests
 
 WORKDIR /tmp/riscv-tests
-
-# patch link.ld start=0x0
-RUN /usr/local/bin/patch_linkld.py
 
 RUN install -d "${RISCV_TESTS_ISA_DIR}"
 
