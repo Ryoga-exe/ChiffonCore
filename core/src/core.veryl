@@ -202,6 +202,7 @@ module core (
         // exception
         exq_wdata.expt.valid = (ids_inst_bits == 32'h00000073); // ECALL
         exq_wdata.expt.cause = CsrCause::ENVIRONMENT_CALL_FROM_M_MODE;
+        exq_wdata.expt.value = 0;
     }
 
     // ====================================================

@@ -31,6 +31,7 @@ package corectrl {
     struct ExceptionInfo {
         valid: logic   ,
         cause: CsrCause,
+        value: UIntX   ,
     }
 
     /// Determines whether an instruction accesses memory
