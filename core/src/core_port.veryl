@@ -9,17 +9,17 @@ module core_port (
 
     mem_valid : output logic                    ,
     mem_ready : input  logic                    ,
-    mem_addr  : output logic<32>                , // NOTE: consider: use MEM_ADDR_WIDTH (but 20)
+    mem_addr  : output logic<32>                , // NOTE: consider: use RAM_ADDR_WIDTH (but 20)
     mem_wen   : output logic                    ,
-    mem_wdata : output logic<MEM_DATA_WIDTH>    ,
-    mem_wmask : output logic<MEM_DATA_WIDTH / 8>,
+    mem_wdata : output logic<RAM_DATA_WIDTH>    ,
+    mem_wmask : output logic<RAM_DATA_WIDTH / 8>,
     mem_rvalid: input  logic                    ,
-    mem_rdata : input  logic<MEM_DATA_WIDTH>    ,
+    mem_rdata : input  logic<RAM_DATA_WIDTH>    ,
 
     led: output UIntX,
 ) {
     inst i_membus: membus_if::<ILEN, XLEN>; // for instruction fetch
-    inst d_membus: membus_if::<MEM_DATA_WIDTH, XLEN>; // for load/store
+    inst d_membus: Membus; // for load/store
 
     var memarb_last_i    : logic;
     var memarb_last_iaddr: Addr ;
@@ -36,6 +36,14 @@ module core_port (
         }
     }
 
+    // NOTE: consider
+    // アドレスをデータ単位でのアドレスに変換する (必要？)
+    function addr_to_memaddr::<DATA_WIDTH: u32, ADDR_WIDTH: u32> (
+        addr: input logic<XLEN>,
+    ) -> logic<ADDR_WIDTH> {
+        return addr[$clog2(DATA_WIDTH / 8)+:ADDR_WIDTH];
+    }
+
     // core drives: bus.valid/addr/wen/wdata
     // outside drives: bus.ready/rvalid/rdata
     always_comb {
@@ -50,12 +58,12 @@ module core_port (
         mem_valid = i_membus.valid | d_membus.valid;
 
         if d_membus.valid {
-            mem_addr  = d_membus.addr;
+            mem_addr  = d_membus.addr; // NOTE: addr_to_memaddr::<RAM_DATA_WIDTH, RAM_ADDR_WIDTH>(d_membus.addr);
             mem_wen   = d_membus.wen;
             mem_wdata = d_membus.wdata;
             mem_wmask = d_membus.wmask;
         } else {
-            mem_addr  = i_membus.addr;
+            mem_addr  = i_membus.addr; // NOTE: addr_to_memaddr::<RAM_DATA_WIDTH, RAM_ADDR_WIDTH>(i_membus.addr);
             mem_wen   = 0; // fetch always
             mem_wdata = 'x;
             mem_wmask = 'x;
