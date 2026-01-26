@@ -254,8 +254,8 @@ module divunit #(
                     state = State::Finish;
                 } else {
                     if dividend_saved >= divisor_saved {
-                        divisor_saved -= divisor_saved;
-                        quotient      =  (quotient << 1) + 1;
+                        dividend_saved -= divisor_saved;
+                        quotient       =  (quotient << 1) + 1;
                     } else {
                         quotient <<= 1;
                     }
