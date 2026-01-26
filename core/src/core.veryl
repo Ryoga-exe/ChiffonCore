@@ -179,16 +179,18 @@ module core (
     // ====================================================
     // * ID Stage
     // ====================================================
-    let ids_valid    : logic    = if_fifo_rvalid;
-    let ids_pc       : Addr     = if_fifo_rdata.addr;
-    let ids_inst_bits: Inst     = if_fifo_rdata.bits;
-    var ids_ctrl     : InstCtrl;
-    var ids_imm      : UIntX   ;
+    let ids_valid     : logic    = if_fifo_rvalid;
+    let ids_pc        : Addr     = if_fifo_rdata.addr;
+    let ids_inst_bits : Inst     = if_fifo_rdata.bits;
+    var ids_inst_valid: logic   ;
+    var ids_ctrl      : InstCtrl;
+    var ids_imm       : UIntX   ;
 
     inst decoder: inst_decoder (
-        bits: ids_inst_bits,
-        ctrl: ids_ctrl     ,
-        imm : ids_imm      ,
+        bits : ids_inst_bits ,
+        valid: ids_inst_valid,
+        ctrl : ids_ctrl      ,
+        imm  : ids_imm       ,
     );
 
     always_comb {
@@ -199,6 +201,24 @@ module core (
         exq_wdata.bits = if_fifo_rdata.bits;
         exq_wdata.ctrl = ids_ctrl;
         exq_wdata.imm  = ids_imm;
+        // exception
+        exq_wdata.expt = 0; // default value
+        if !ids_inst_valid {
+            // illegal instruction
+            exq_wdata.expt.valid = 1;
+            exq_wdata.expt.cause = CsrCause::ILLEGAL_INSTRUCTION;
+            exq_wdata.expt.value = {1'b0 repeat XLEN - ILEN, ids_inst_bits};
+        } else if ids_inst_bits == 32'h00000073 {
+            // ECALL
+            exq_wdata.expt.valid = 1;
+            exq_wdata.expt.cause = CsrCause::ENVIRONMENT_CALL_FROM_M_MODE;
+            exq_wdata.expt.value = 0;
+        } else if ids_inst_bits == 32'h00100073 {
+            // EBREAK
+            exq_wdata.expt.valid = 1;
+            exq_wdata.expt.cause = CsrCause::BREAKPOINT;
+            exq_wdata.expt.value = ids_pc;
+        }
     }
 
     // ====================================================
@@ -339,17 +359,39 @@ module core (
         memq_wdata.alu_result = if exs_ctrl.is_muldiv ? exs_muldiv_result : exs_alu_result;
         memq_wdata.br_taken   = exs_ctrl.is_jump || inst_is_br(exs_ctrl) && exs_brunit_take;
         memq_wdata.jump_addr  = if inst_is_br(exs_ctrl) ? exs_pc + exs_imm : exs_alu_result & ~1;
+        // exception
+        let instruction_address_misaligned: logic = memq_wdata.br_taken && memq_wdata.jump_addr[1:0] != 2'b00;
+        let loadstore_address_misaligned  : logic = inst_is_memop(exs_ctrl) && case exs_ctrl.funct3[1:0] {
+            2'b00  : 0, // B
+            2'b01  : exs_alu_result[0] != 1'b0, // H
+            2'b10  : exs_alu_result[1:0] != 2'b0, // W
+            2'b11  : exs_alu_result[2:0] != 3'b0, // D
+            default: 0,
+        };
+        memq_wdata.expt = exq_rdata.expt;
+        if !memq_rdata.expt.valid {
+            if instruction_address_misaligned {
+                memq_wdata.expt.valid = 1;
+                memq_wdata.expt.cause = CsrCause::INSTRUCTION_ADDRESS_MISALIGNED;
+                memq_wdata.expt.value = memq_wdata.jump_addr;
+            } else if loadstore_address_misaligned {
+                memq_wdata.expt.valid = 1;
+                memq_wdata.expt.cause = if exs_ctrl.is_load ? CsrCause::LOAD_ADDRESS_MISALIGNED : CsrCause::STORE_AMO_ADDRESS_MISALIGNED;
+                memq_wdata.expt.value = exs_alu_result;
+            }
+        }
     }
 
     // ====================================================
     // * MEM Stage
     // ====================================================
-    var mems_is_new   : logic      ;
-    let mems_valid    : logic       = memq_rvalid;
-    let mems_pc       : Addr        = memq_rdata.addr;
-    let mems_inst_bits: Inst        = memq_rdata.bits;
-    let mems_ctrl     : InstCtrl    = memq_rdata.ctrl;
-    let mems_rd_addr  : logic   <5> = mems_inst_bits[11:7];
+    var mems_is_new   : logic           ;
+    let mems_valid    : logic            = memq_rvalid;
+    let mems_pc       : Addr             = memq_rdata.addr;
+    let mems_inst_bits: Inst             = memq_rdata.bits;
+    let mems_ctrl     : InstCtrl         = memq_rdata.ctrl;
+    let mems_expt     : ExceptionInfo    = memq_rdata.expt;
+    let mems_rd_addr  : logic        <5> = mems_inst_bits[11:7];
 
     assign control_hazard         = mems_valid && (csru_raise_trap || mems_ctrl.is_jump || memq_rdata.br_taken);
     assign control_hazard_pc_next = if csru_raise_trap ? csru_trap_vector : memq_rdata.jump_addr;
@@ -371,16 +413,16 @@ module core (
     var memu_stall: logic;
 
     inst memu: memunit (
-        clk                          ,
-        rst                          ,
-        valid : mems_valid           ,
-        is_new: mems_is_new          ,
-        ctrl  : mems_ctrl            ,
-        addr  : memq_rdata.alu_result,
-        rs2   : memq_rdata.rs2_data  ,
-        rdata : memu_rdata           ,
-        stall : memu_stall           ,
-        membus: d_membus             ,
+        clk                                   ,
+        rst                                   ,
+        valid : mems_valid && !mems_expt.valid,
+        is_new: mems_is_new                   ,
+        ctrl  : mems_ctrl                     ,
+        addr  : memq_rdata.alu_result         ,
+        rs2   : memq_rdata.rs2_data           ,
+        rdata : memu_rdata                    ,
+        stall : memu_stall                    ,
+        membus: d_membus                      ,
     );
 
     // CSR
@@ -389,22 +431,21 @@ module core (
     var csru_trap_vector: Addr ;
 
     inst csru: csrunit (
-        clk                            ,
-        rst                            ,
-        valid   : mems_valid           ,
-        pc      : mems_pc              ,
-        ctrl    : mems_ctrl            ,
-        rd_addr : mems_rd_addr         ,
-        csr_addr: mems_inst_bits[31:20],
-        rs1     : if mems_ctrl.funct3[2] == 1 && mems_ctrl.funct3[1:0] != 0 ?
-            {1'b0 repeat XLEN - $bits(memq_rdata.rs1_addr), memq_rdata.rs1_addr} // expand rs1 with 0
-        :
-            memq_rdata.rs1_data
-        ,
-        rdata      : csru_rdata      ,
-        raise_trap : csru_raise_trap ,
-        trap_vector: csru_trap_vector,
-        led                          ,
+        clk                               ,
+        rst                               ,
+        valid      : mems_valid           ,
+        pc         : mems_pc              ,
+        inst_bits  : mems_inst_bits       ,
+        ctrl       : mems_ctrl            ,
+        expt_info  : mems_expt            ,
+        rd_addr    : mems_rd_addr         ,
+        csr_addr   : mems_inst_bits[31:20],
+        rs1_addr   : memq_rdata.rs1_addr  ,
+        rs1_data   : memq_rdata.rs1_data  ,
+        rdata      : csru_rdata           ,
+        raise_trap : csru_raise_trap      ,
+        trap_vector: csru_trap_vector     ,
+        led                               ,
     );
 
     always_comb {
@@ -418,6 +459,7 @@ module core (
         wbq_wdata.alu_result = memq_rdata.alu_result;
         wbq_wdata.mem_rdata  = memu_rdata;
         wbq_wdata.csr_rdata  = csru_rdata;
+        wbq_wdata.raise_trap = csru_raise_trap;
     }
 
     // ====================================================
@@ -439,7 +481,7 @@ module core (
     };
 
     always_ff {
-        if wbs_valid && wbs_ctrl.rwb_en {
+        if wbs_valid && wbs_ctrl.rwb_en && !wbq_rdata.raise_trap {
             regfile[wbs_rd_addr] = wbs_wb_data;
         }
     }
@@ -472,6 +514,11 @@ module core (
                 $display("  %h : %h", ids_pc, if_fifo_rdata.bits);
                 $display("  itype : %b", ids_ctrl.itype);
                 $display("  imm   : %h", ids_imm);
+                $display("  expt  : %b", exq_wdata.expt.valid);
+                if exq_wdata.expt.valid {
+                    $display("  cause: %d", exq_wdata.expt.cause);
+                    $display("  value: %d", exq_wdata.expt.value);
+                }
             }
             $display("EX -----");
             if exs_valid {
@@ -480,6 +527,10 @@ module core (
                 $display("  op2     : %h", exs_op2);
                 $display("  alu     : %h", exs_alu_result);
                 $display("  dhazard : %b", exs_data_hazard);
+                $display("  muldiv  : %b", exs_muldiv_stall);
+                if exs_ctrl.is_muldiv && exs_muldiv_rvalid {
+                    $display("  muldiv result : %h", exs_muldiv_result);
+                }
                 if inst_is_br(exs_ctrl) {
                     $display("  br take : ", exs_brunit_take);
                 }
@@ -489,7 +540,7 @@ module core (
                 $display("  %h : %h", memq_rdata.addr, memq_rdata.bits);
                 $display("  mem stall : %b", memu_stall);
                 $display("  mem rdata : %h", memu_rdata);
-                if mems_ctrl.is_csr {
+                if mems_ctrl.is_csr || csru_raise_trap {
                     $display("  csr rdata : %h", csru_rdata);
                     $display("  csr trap  : %b", csru_raise_trap);
                     $display("  csr vec   : %h", csru_trap_vector);

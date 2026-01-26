@@ -1,0 +1,8 @@
+01000093 // 0x0000: addi  x1, x0, 0x10
+30509073 // 0x0004: csrrw x0, mtvec, x1
+00000013 // 0x0008: nop
+ffffffff // 0x000C: (illegal instruction)
+34202573 // 0x0010: csrrs x10, mcause, x0
+341025f3 // 0x0014: csrrs x11, mepc,   x0
+34302673 // 0x0018: csrrs x12, mtval,  x0
+ff5ff06f // 0x001C: jal   x0, -12        (loop)

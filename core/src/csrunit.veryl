@@ -3,36 +3,43 @@ import corectrl::*;
 
 /// CSR module
 module csrunit (
-    clk        : input  clock       ,
-    rst        : input  reset       ,
-    valid      : input  logic       , /// Whether a command/instruction is being supplied
-    pc         : input  Addr        , /// Current Instruction Address
-    ctrl       : input  InstCtrl    , /// The instruction's `InstCtrl`
-    rd_addr    : input  logic   <5> , /// Current instruction's rd number
-    csr_addr   : input  logic   <12>, /// CSR address specified by the instruction (upper 12 bits of the instruction)
-    rs1        : input  UIntX       , /// `rs1` when CSRR(W|S|C), the immediate (5 bits) zero-extended when CSRR(W|S|C)I
-    rdata      : output UIntX       , /// Result of reading the CSR by the CSR instruction
-    raise_trap : output logic       , /// 1 when raise trap
-    trap_vector: output Addr        , /// Address to jump to when an exception occurs
-    led        : output UIntX       , // LED
+    clk        : input  clock            ,
+    rst        : input  reset            ,
+    valid      : input  logic            , /// Whether a command/instruction is being supplied
+    pc         : input  Addr             , /// Current Instruction Address
+    inst_bits  : input  Inst             , /// Bits representing current instruction
+    ctrl       : input  InstCtrl         , /// The instruction's `InstCtrl`
+    expt_info  : input  ExceptionInfo    , /// Exception Info
+    rd_addr    : input  logic        <5> , /// Current instruction's rd number
+    csr_addr   : input  logic        <12>, /// CSR address specified by the instruction (upper 12 bits of the instruction)
+    rs1_addr   : input  logic        <5> , /// `rs1` address
+    rs1_data   : input  UIntX            , /// `rs1` data
+    rdata      : output UIntX            , /// Result of reading the CSR by the CSR instruction
+    raise_trap : output logic            , /// 1 when raise trap
+    trap_vector: output Addr             , /// Address to jump to when an exception occurs
+    led        : output UIntX            , // LED
 ) {
     // CSRR(W|S|C)[I] inst?
     let is_wsc: logic = ctrl.is_csr && ctrl.funct3[1:0] != 0;
-    // ECALL inst?
-    let is_ecall: logic = ctrl.is_csr && csr_addr == 0 && rs1[4:0] == 0 && ctrl.funct3 == 0 && rd_addr == 0;
     // MRET inst?
-    let is_mret: logic = ctrl.is_csr && csr_addr == 12'b0011000_00010 && rs1[4:0] == 0 && ctrl.funct3 == 0 && rd_addr == 0;
+    let is_mret: logic = inst_bits == 32'h30200073;
+
+    // Check CSR access (Consider: judge in ID stage?)
+    let will_not_write_csr     : logic = (ctrl.funct3[1:0] == 2 || ctrl.funct3[1:0] == 3) && rs1_addr == 0; // set/clear with source = 0
+    let expt_write_readonly_csr: logic = is_wsc && !will_not_write_csr && csr_addr[11:10] == 2'b11; // attempt to write read-only CSR
 
     // wmasks
     const MTVEC_WMASK : UIntX = 'hffff_ffff_ffff_fffc;
     const MEPC_WMASK  : UIntX = 'hffff_ffff_ffff_fffc;
     const MCAUSE_WMASK: UIntX = 'hffff_ffff_ffff_ffff;
+    const MTVAL_WMASK : UIntX = 'hffff_ffff_ffff_ffff;
     const LED_WMASK   : UIntX = 'hffff_ffff_ffff_ffff;
 
     // CSR
     var mtvec : UIntX;
     var mepc  : UIntX;
     var mcause: UIntX;
+    var mtval : UIntX;
 
     var wmask: UIntX; // write mask
     var wdata: UIntX; // write data
@@ -43,6 +50,7 @@ module csrunit (
             CsrAddr::MTVEC : mtvec,
             CsrAddr::MEPC  : mepc,
             CsrAddr::MCAUSE: mcause,
+            CsrAddr::MTVAL : mtval,
             CsrAddr::LED   : led,
             default        : 'x,
         };
@@ -51,13 +59,15 @@ module csrunit (
             CsrAddr::MTVEC : MTVEC_WMASK,
             CsrAddr::MEPC  : MEPC_WMASK,
             CsrAddr::MCAUSE: MCAUSE_WMASK,
+            CsrAddr::MTVAL : MTVAL_WMASK,
             CsrAddr::LED   : LED_WMASK,
             default        : 0,
         };
-        wdata = case ctrl.funct3[1:0] {
-            2'b01  : rs1,
-            2'b10  : rdata | rs1,
-            2'b11  : rdata & ~rs1,
+        let wsource: UIntX = if ctrl.funct3[2] ? {1'b0 repeat XLEN - 5, rs1_addr} : rs1_data;
+        wdata   = case ctrl.funct3[1:0] {
+            2'b01  : wsource,
+            2'b10  : rdata | wsource,
+            2'b11  : rdata & ~wsource,
             default: 'x,
         } & wmask | (rdata & ~wmask);
     }
@@ -67,6 +77,7 @@ module csrunit (
             mtvec  = 0;
             mepc   = 0;
             mcause = 0;
+            mtval  = 0;
             led    = 0;
         } else {
             if valid {
@@ -74,6 +85,7 @@ module csrunit (
                     if raise_expt {
                         mepc   = pc;
                         mcause = trap_cause;
+                        mtval  = expt_value;
                     }
                 } else {
                     if is_wsc {
@@ -81,6 +93,7 @@ module csrunit (
                             CsrAddr::MTVEC : mtvec  = wdata;
                             CsrAddr::MEPC  : mepc   = wdata;
                             CsrAddr::MCAUSE: mcause = wdata;
+                            CsrAddr::MTVAL : mtval  = wdata;
                             CsrAddr::LED   : led    = wdata;
                             default        : {}
                         }
@@ -92,8 +105,17 @@ module csrunit (
     }
 
     // Exception
-    let raise_expt: logic = valid && is_ecall;
-    let expt_cause: UIntX = CsrCause::ENVIRONMENT_CALL_FROM_M_MODE;
+    let raise_expt: logic = valid && (expt_info.valid || expt_write_readonly_csr);
+    let expt_cause: UIntX = switch {
+        expt_info.valid        : expt_info.cause,
+        expt_write_readonly_csr: CsrCause::ILLEGAL_INSTRUCTION,
+        default                : 0,
+    };
+    let expt_value: UIntX = switch {
+        expt_info.valid                            : expt_info.value,
+        expt_cause == CsrCause::ILLEGAL_INSTRUCTION: {1'b0 repeat XLEN - $bits(Inst), inst_bits},
+        default                                    : 0
+    };
 
     // Trap
     assign raise_trap  = raise_expt || (valid && is_mret);

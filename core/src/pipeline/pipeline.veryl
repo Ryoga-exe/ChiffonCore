@@ -13,24 +13,26 @@ package pipeline {
 
     // ID -> EX
     struct exq_type {
-        addr: Addr    ,
-        bits: Inst    ,
-        ctrl: InstCtrl,
-        imm : UIntX   ,
+        addr: Addr         ,
+        bits: Inst         ,
+        ctrl: InstCtrl     ,
+        imm : UIntX        ,
+        expt: ExceptionInfo,
     }
 
     // EX -> MEM
     struct memq_type {
-        addr      : Addr       ,
-        bits      : Inst       ,
-        ctrl      : InstCtrl   ,
-        imm       : UIntX      ,
-        alu_result: UIntX      ,
-        rs1_addr  : logic   <5>,
-        rs1_data  : UIntX      ,
-        rs2_data  : UIntX      ,
-        br_taken  : logic      ,
-        jump_addr : Addr       ,
+        addr      : Addr            ,
+        bits      : Inst            ,
+        ctrl      : InstCtrl        ,
+        imm       : UIntX           ,
+        expt      : ExceptionInfo   ,
+        alu_result: UIntX           ,
+        rs1_addr  : logic        <5>,
+        rs1_data  : UIntX           ,
+        rs2_data  : UIntX           ,
+        br_taken  : logic           ,
+        jump_addr : Addr            ,
     }
 
     // MEM -> WB
@@ -42,5 +44,6 @@ package pipeline {
         alu_result: UIntX   ,
         mem_rdata : UIntX   ,
         csr_rdata : UIntX   ,
+        raise_trap: logic   ,
     }
 }

@@ -6,7 +6,7 @@ module brunit (
     funct3: input  logic<3>,
     op1   : input  UIntX   ,
     op2   : input  UIntX   ,
-    take  : output logic, /// Whether the branch condition is met
+    take  : output logic   , /// Whether the branch condition is met
 ) {
     let beq : logic = (op1 == op2);
     let blt : logic = $signed(op1) <: $signed(op2);
