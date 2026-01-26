@@ -16,12 +16,18 @@ add_files -fileset sources_1 [glob target/*.sv]
 add_files -fileset sources_1 [glob target/**/*.sv]
 add_files -fileset sources_1 target/top.v
 add_files -fileset sources_1 bootrom.hex
+
+# --- Boot ROM ------------------------------------------
+set bootrom_hex "bootrom.hex"
+add_files -fileset sources_1 -norecurse $bootrom_hex
+# Mark as "Memory Initialization Files"
+set_property file_type {Memory Initialization Files} [get_files bootrom.hex]
+
 update_compile_order -fileset sources_1
 
 # --- Add Testbench -------------------------------------
 add_files -fileset sim_1 [glob test/tb/*.sv]
 add_files -fileset sim_1 [glob test/hex/**/*.hex]
-add_files -fileset sim_1 bootrom.hex
 
 # --- Create Block Design: top + axi_vip ----------------
 set design_name "design_1"
