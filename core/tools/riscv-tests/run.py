@@ -122,7 +122,7 @@ def main() -> int:
 
     ap.add_argument("--membase", default="20000000")
     ap.add_argument("--entry", default="00000000")
-    ap.add_argument("--tohost", default="00001000")
+    ap.add_argument("--tohost", default="80001000")
     ap.add_argument(
         "--tb_timeout",
         default="5000000",
