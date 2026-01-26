@@ -3,7 +3,9 @@
 /// This lets a Verilog top (top.v) instantiate the CPU without using SV interfaces in the top.
 import eei::*;
 
-module core_port (
+module core_port #(
+    param ROM_FILEPATH: string = "bootrom.hex",
+) (
     clk: input clock,
     rst: input reset,
 
@@ -20,6 +22,9 @@ module core_port (
 ) {
     inst mmio_membus    : Membus;
     inst mmio_ram_membus: Membus;
+    inst mmio_rom_membus: Membus;
+
+    inst rom_membus: membus_if::<ROM_DATA_WIDTH, ROM_ADDR_WIDTH>;
 
     inst i_membus: membus_if::<ILEN, XLEN>; // for instruction fetch
     inst d_membus: Membus; // for load/store
@@ -78,11 +83,39 @@ module core_port (
         mmio_ram_membus.rdata  = ram_membus_rdata;
     }
 
+    // Converts the address to a data unit address
+    function addr_to_memaddr::<DATA_WIDTH: u32, ADDR_WIDTH: u32> (
+        addr: input logic<XLEN>,
+    ) -> logic<ADDR_WIDTH> {
+        return addr[$clog2(DATA_WIDTH / 8)+:ADDR_WIDTH];
+    }
+
+    always_comb {
+        // mmio <> ROM
+        rom_membus.valid       = mmio_rom_membus.valid;
+        mmio_rom_membus.ready  = rom_membus.ready;
+        rom_membus.addr        = addr_to_memaddr::<ROM_DATA_WIDTH, ROM_ADDR_WIDTH>(mmio_rom_membus.addr);
+        rom_membus.wen         = 0;
+        rom_membus.wdata       = 0;
+        rom_membus.wmask       = 0;
+        mmio_rom_membus.rvalid = rom_membus.rvalid;
+        mmio_rom_membus.rdata  = rom_membus.rdata;
+    }
+
+    inst rom: memory::<ROM_DATA_WIDTH, ROM_ADDR_WIDTH> #(
+        FILEPATH: ROM_FILEPATH,
+    ) (
+        clk               ,
+        rst               ,
+        membus: rom_membus,
+    );
+
     inst mmioc: mmio_controller (
         clk                        ,
         rst                        ,
         req_core  : mmio_membus    ,
         ram_membus: mmio_ram_membus,
+        rom_membus: mmio_rom_membus,
     );
 
     inst u_core: core (
