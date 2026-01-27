@@ -170,6 +170,9 @@ module top #(
       .ram_membus_rvalid(ram_rvalid),
       .ram_membus_rdata (ram_rdata),
 
+      .uart_rxd(UART_RX),
+      .uart_txd(UART_TX),
+
       .led(csr_led)
   );
 
