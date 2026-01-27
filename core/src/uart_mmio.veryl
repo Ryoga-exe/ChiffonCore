@@ -1,0 +1,217 @@
+import eei::*;
+
+module uart_mmio #(
+    // Default assumes ACLK/FCLK0 = 100MHz on Ultra96 designs
+    param CLOCK_FREQUENCY: u32 = 100_000_000,
+    param BAUD_RATE      : u32 = 115200     ,
+) (
+    clk   : input   clock        ,
+    rst   : input   reset        ,
+    rxd   : input   logic        ,
+    txd   : output  logic        ,
+    membus: modport Membus::slave,
+) {
+    const REG_RBR_THR: logic<12> = 12'h000;
+    const REG_LSR    : logic<12> = 12'h005;
+
+    // ====================================================
+    // * RX/TX engines
+    // ====================================================
+    var rx_word: logic<8>;
+    var rx_we  : logic   ;
+    var rx_full: logic   ;
+
+    inst u_rx: receiver #(
+        CLOCK_FREQUENCY: CLOCK_FREQUENCY,
+        BAUD_RATE      : BAUD_RATE      ,
+        WORD_WIDTH     : 8              ,
+    ) (
+        clk          ,
+        rst          ,
+        din : rxd    ,
+        dout: rx_word,
+        full: rx_full,
+        we  : rx_we  ,
+    );
+
+    var tx_word : logic<8>;
+    var tx_empty: logic   ;
+    var tx_re   : logic   ;
+
+    inst u_tx: transmitter #(
+        CLOCK_FREQUENCY: CLOCK_FREQUENCY,
+        BAUD_RATE      : BAUD_RATE      ,
+        WORD_WIDTH     : 8              ,
+    ) (
+        clk            ,
+        rst            ,
+        din  : tx_word ,
+        empty: tx_empty,
+        re   : tx_re   ,
+        dout : txd     ,
+    );
+
+    // ====================================================
+    // * FIFOs
+    // ====================================================
+
+    // RX FIFO: written by receiver, read by MMIO RBR
+    var rx_fifo_dout: logic<8>;
+    var rx_empty    : logic   ;
+
+    var rx_re_pulse: logic;
+
+    inst u_rx_fifo: $sv::fifo_8in8out_1024depth (
+        clk                               ,
+        rst       : rst as reset_sync_high,
+        din       : rx_word               ,
+        rd_en     : rx_re_pulse           ,
+        wr_en     : rx_we                 ,
+        dout      : rx_fifo_dout          ,
+        empty     : rx_empty              ,
+        full      : rx_full               ,
+        overflow  : _                     ,
+        valid     : _                     ,
+        underflow : _                     ,
+        data_count: _                     ,
+    );
+
+    // TX FIFO: written by MMIO THR, read by transmitter
+    var tx_fifo_din: logic<8>;
+    var tx_fifo_we : logic   ;
+    var tx_full    : logic   ;
+
+    inst u_tx_fifo: $sv::fifo_8in8out_1024depth (
+        clk                               ,
+        rst       : rst as reset_sync_high,
+        din       : tx_fifo_din           ,
+        rd_en     : tx_re                 ,
+        wr_en     : tx_fifo_we            ,
+        dout      : tx_word               ,
+        empty     : tx_empty              ,
+        full      : tx_full               ,
+        overflow  : _                     ,
+        valid     : _                     ,
+        underflow : _                     ,
+        data_count: _                     ,
+    );
+
+    // ====================================================
+    // * Membus request/response
+    // ====================================================
+    var pending   : logic;
+    var addr_saved: Addr ;
+    var wen_saved : logic;
+
+    // response regs
+    var resp_valid: logic;
+    var resp_data : UIntX;
+
+    // ready calc
+    var ready_calc: logic;
+
+    always_comb {
+        membus.ready  = ready_calc;
+        membus.rvalid = resp_valid;
+        membus.rdata  = resp_data;
+    }
+
+    // Combinational ready (stall only when busy or THR write while tx_full)
+    let off: logic<12> = membus.addr[11:0];
+    let bi : logic<3>  = membus.addr[2:0];
+
+    always_comb {
+        ready_calc = !pending;
+
+        if ready_calc && membus.valid {
+            if membus.wen && (off == REG_RBR_THR) {
+                if membus.wmask[bi] && tx_full {
+                    ready_calc = 0;
+                }
+            }
+        }
+    }
+
+    function get_wbyte (
+        wdata: input UIntX   ,
+        bi   : input logic<3>,
+    ) -> logic<8> {
+        case bi {
+            3'd0   : return wdata[7:0];
+            3'd1   : return wdata[15:8];
+            3'd2   : return wdata[23:16];
+            3'd3   : return wdata[31:24];
+            3'd4   : return wdata[39:32];
+            3'd5   : return wdata[47:40];
+            3'd6   : return wdata[55:48];
+            3'd7   : return wdata[63:56];
+            default: return 8'h00;
+        }
+    }
+
+    // Main
+    always_ff {
+        if_reset {
+            pending    = 0;
+            addr_saved = 0;
+            wen_saved  = 0;
+
+            resp_valid = 0;
+            resp_data  = 0;
+
+            rx_re_pulse = 0;
+            tx_fifo_we  = 0;
+            tx_fifo_din = 0;
+        } else {
+            // default values
+            resp_valid = 0;
+            resp_data  = 0;
+
+            rx_re_pulse = 0;
+            tx_fifo_we  = 0;
+            tx_fifo_din = 0;
+
+            // Response
+            if pending {
+                resp_valid = 1;
+
+                if !wen_saved {
+                    if off == REG_RBR_THR {
+                        // RBR
+                        resp_data = (rx_fifo_dout as UIntX) << {bi, 3'b000};
+                    } else if off == REG_LSR {
+                        resp_data = {0'b0, tx_empty, !tx_full, 0'b0, 0'b0, 0'b0, 0'b0, !rx_empty} as UIntX << {bi, 3'b000};
+                    } else {
+                        resp_data = 0;
+                    }
+                }
+
+                pending = 0;
+            }
+
+            // Accept
+            if !pending && membus.valid && membus.ready {
+                pending    = 1;
+                addr_saved = membus.addr;
+                wen_saved  = membus.wen;
+
+                if membus.wen {
+                    // THR write
+                    if off == REG_RBR_THR {
+                        if membus.wmask[bi] && !tx_full {
+                            tx_fifo_we  = 1;
+                            tx_fifo_din = get_wbyte(membus.wdata, bi);
+                        }
+                    }
+                } else {
+                    // RBR read pop RX FIFO
+                    if off == REG_RBR_THR {
+                        if !rx_empty {
+                            rx_re_pulse = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
