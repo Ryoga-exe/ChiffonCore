@@ -26,6 +26,10 @@ package eei {
     const MMAP_ROM_BEGIN: Addr = 'h1000 as Addr;
     const MMAP_ROM_END  : Addr = MMAP_ROM_BEGIN + 'h3ff as Addr;
 
+    // UART (16550)
+    const MMAP_UART_BEGIN: Addr = 'h1000_0000 as Addr;
+    const MMAP_UART_END  : Addr = MMAP_UART_BEGIN + 'h3ff as Addr;
+
     // pc on reset
     const INITIAL_PC: Addr = MMAP_ROM_BEGIN;
 
