@@ -1,0 +1,69 @@
+module transmitter #(
+    param CLOCK_FREQUENCY: u32 = 100_000_000,
+    param BAUD_RATE      : u32 = 115200     ,
+    param WORD_WIDTH     : u32 = 8          ,
+) (
+    clk  : input  clock            ,
+    rst  : input  reset            ,
+    din  : input  logic<WORD_WIDTH>,
+    empty: input  logic            ,
+    re   : output logic            ,
+    dout : output logic            ,
+) {
+    const CLOCK_PER_BIT: u32 = CLOCK_FREQUENCY / BAUD_RATE;
+
+    enum State {
+        Wait,
+        AssertReadEnable,
+        ReadWord,
+        TransmitBits,
+    }
+
+    var state            : State                ;
+    var data             : logic<WORD_WIDTH + 2>;
+    var clock_counts     : logic<32>            ;
+    var full_clock_counts: logic                ;
+
+    assign re   = (state == State::AssertReadEnable);
+    assign dout = if state == State::TransmitBits ? data[0] : 1;
+
+    // state
+    always_ff {
+        if_reset {
+            state = State::Wait;
+        } else {
+            state = case state {
+                State::Wait            : if ~empty ? State::AssertReadEnable : state,
+                State::AssertReadEnable: State::ReadWord,
+                State::ReadWord        : State::TransmitBits,
+                State::TransmitBits    : if full_clock_counts && (data == {1'b0 repeat WORD_WIDTH, 1'b1}) ? State::Wait : state,
+                default                : state,
+            };
+        }
+    }
+
+    always_ff {
+        if_reset {
+            data = {1'b1 repeat WORD_WIDTH + 1};
+        } else {
+            data = case state {
+                State::ReadWord    : {1'b1, din, 1'b0},
+                State::TransmitBits: if full_clock_counts ? {1'b0, data[WORD_WIDTH + 1:1]} : data,
+                default            : {1'b1 repeat WORD_WIDTH + 1},
+            };
+        }
+    }
+
+    always_ff {
+        if_reset {
+            clock_counts = 32'h0;
+        } else {
+            clock_counts = case state {
+                State::TransmitBits: if full_clock_counts ? 32'h0 : clock_counts + 32'h1,
+                default            : 32'h0,
+            };
+        }
+    }
+
+    assign full_clock_counts = (clock_counts == (CLOCK_PER_BIT - 1));
+}
