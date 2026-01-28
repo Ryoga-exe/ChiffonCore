@@ -23,6 +23,7 @@ package corectrl {
         is_jump  : logic      , // is jump inst?
         is_load  : logic      , // is load inst?
         is_csr   : logic      , // is CSR inst?
+        is_amo   : logic      , // is AMO inst?
         funct3   : logic   <3>, // funct3 field in inst
         funct7   : logic   <7>, // funct7 field in inst
     }
@@ -38,7 +39,7 @@ package corectrl {
     function inst_is_memop (
         ctrl: input InstCtrl,
     ) -> logic {
-        return ctrl.itype == InstType::S || ctrl.is_load;
+        return ctrl.itype == InstType::S || ctrl.is_load || ctrl.is_amo;
     }
 
     /// Determines whether an instruction is a store operation
