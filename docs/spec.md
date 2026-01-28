@@ -70,3 +70,16 @@ c.f: https://msyksphinz-self.github.io/riscv-isadoc/html/index.html
 |                 | lwu         | ✅     |
 |                 | ld          | ✅     |
 |                 | sd          | ✅     |
+| RV64M (RV32M)   | mul         | ✅     |
+|                 | mulh        | ✅     |
+|                 | mulhsu      | ✅     |
+|                 | mulhu       | ✅     |
+|                 | div         | ✅     |
+|                 | divu        | ✅     |
+|                 | rem         | ✅     |
+|                 | remu        | ✅     |
+| RV64M           | mulw        | ✅     |
+|                 | divw        | ✅     |
+|                 | divuw       | ✅     |
+|                 | remw        | ✅     |
+|                 | remuw       | ✅     |
