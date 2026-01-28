@@ -1,0 +1,65 @@
+import eei::*;
+
+module inst_fetcher (
+    clk    : input   clock              ,
+    rst    : input   reset              ,
+    core_if: modport core_inst_if::slave,
+    mem_if : modport Membus::master     ,
+) {
+    struct fetch_fifo_type {
+        addr: Addr                    ,
+        bits: logic<MEMBUS_DATA_WIDTH>,
+    }
+
+    var fetch_fifo_flush : logic          ;
+    var fetch_fifo_wvalid: logic          ;
+    var fetch_fifo_wready: logic          ;
+    var fetch_fifo_wdata : fetch_fifo_type;
+    var fetch_fifo_rdata : fetch_fifo_type;
+    var fetch_fifo_rready: logic          ;
+    var fetch_fifo_rvalid: logic          ;
+
+    inst fetch_fifo: fifo #(
+        DATA_TYPE: fetch_fifo_type,
+        WIDTH    : 3              ,
+    ) (
+        clk                          ,
+        rst                          ,
+        flush     : fetch_fifo_flush ,
+        wready    : _                ,
+        wready_two: fetch_fifo_wready,
+        wvalid    : fetch_fifo_wvalid,
+        wdata     : fetch_fifo_wdata ,
+        rready    : fetch_fifo_rready,
+        rvalid    : fetch_fifo_rvalid,
+        rdata     : fetch_fifo_rdata ,
+    );
+
+    struct issue_fifo_type {
+        addr: Addr,
+        bits: Inst,
+    }
+
+    var issue_fifo_flush : logic          ;
+    var issue_fifo_wvalid: logic          ;
+    var issue_fifo_wready: logic          ;
+    var issue_fifo_wdata : issue_fifo_type;
+    var issue_fifo_rdata : issue_fifo_type;
+    var issue_fifo_rready: logic          ;
+    var issue_fifo_rvalid: logic          ;
+
+    inst issue_fifo: fifo #(
+        DATA_TYPE: issue_fifo_type,
+        WIDTH    : 3              ,
+    ) (
+        clk                      ,
+        rst                      ,
+        flush : issue_fifo_flush ,
+        wready: issue_fifo_wready,
+        wvalid: issue_fifo_wvalid,
+        wdata : issue_fifo_wdata ,
+        rready: issue_fifo_rready,
+        rvalid: issue_fifo_rvalid,
+        rdata : issue_fifo_rdata ,
+    );
+}
