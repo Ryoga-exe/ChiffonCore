@@ -59,6 +59,7 @@ module uart_mmio #(
     var rx_fifo_dout: logic<8>;
     var rx_empty    : logic   ;
 
+    // pulsed for 1 cycle when we accept RBR read and data exists
     var rx_re_pulse: logic;
 
     inst u_rx_fifo: $sv::fifo_8in8out_1024depth (
@@ -117,13 +118,13 @@ module uart_mmio #(
     }
 
     // Combinational ready (stall only when busy or THR write while tx_full)
-    let off: logic<12> = membus.addr[11:0];
-    let bi : logic<3>  = membus.addr[2:0];
-
     always_comb {
         ready_calc = !pending;
 
         if ready_calc && membus.valid {
+            let off: logic<12> = membus.addr[11:0];
+            let bi : logic<3>  = membus.addr[2:0];
+
             if membus.wen && (off == REG_RBR_THR) {
                 if membus.wmask[bi] && tx_full {
                     ready_calc = 0;
@@ -173,14 +174,18 @@ module uart_mmio #(
 
             // Response
             if pending {
+                let off: logic<12> = addr_saved[11:0];
+                let bi : logic<3>  = addr_saved[2:0];
+                let sh : logic<6>  = {bi, 3'b000}; // bi * 8
+
                 resp_valid = 1;
 
                 if !wen_saved {
                     if off == REG_RBR_THR {
                         // RBR
-                        resp_data = (rx_fifo_dout as UIntX) << {bi, 3'b000};
+                        resp_data = (rx_fifo_dout as UIntX) << sh;
                     } else if off == REG_LSR {
-                        resp_data = {0'b0, tx_empty, !tx_full, 0'b0, 0'b0, 0'b0, 0'b0, !rx_empty} as UIntX << {bi, 3'b000};
+                        resp_data = {0'b0, tx_empty, !tx_full, 0'b0, 0'b0, 0'b0, 0'b0, !rx_empty} as UIntX << sh;
                     } else {
                         resp_data = 0;
                     }
@@ -191,6 +196,9 @@ module uart_mmio #(
 
             // Accept
             if !pending && membus.valid && membus.ready {
+                let off: logic<12> = membus.addr[11:0];
+                let bi : logic<3>  = membus.addr[2:0];
+
                 pending    = 1;
                 addr_saved = membus.addr;
                 wen_saved  = membus.wen;
