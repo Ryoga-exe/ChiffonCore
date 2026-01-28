@@ -22,6 +22,10 @@ module amounit (
         master.wmask = 0;
     }
 
+    // lr/sc
+    var is_addr_reserved: logic;
+    var reserved_addr   : Addr ;
+
     // Assign request to master
     function assign_master (
         addr : input Addr                   ,
@@ -39,7 +43,14 @@ module amounit (
     // Accept new request
     function accept_request_comb () {
         if slave.ready && slave.valid {
-            assign_master(slave.addr, slave.wen, slave.wdata, slave.wmask);
+            if slave.is_amo {
+                case slave.amoop {
+                    AMOOp::LR: assign_master(slave.addr, 0, 0, 0);
+                    default  : {}
+                }
+            } else {
+                assign_master(slave.addr, slave.wen, slave.wdata, slave.wmask);
+            }
         }
     }
 
@@ -67,7 +78,12 @@ module amounit (
         reset_master();
         case state {
             State::Init     : accept_request_comb();
-            State::WaitReady: {
+            State::WaitReady: if slave_saved.is_amo {
+                case slave_saved.amoop {
+                    AMOOp::LR: assign_master(slave_saved.addr, 0, 0, 0);
+                    default  : {}
+                }
+            } else {
                 assign_master(slave_saved.addr, slave_saved.wen, slave_saved.wdata, slave_saved.wmask);
             }
             State::WaitValid: accept_request_comb();
@@ -88,7 +104,19 @@ module amounit (
             slave_saved.aq     = slave.aq;
             slave_saved.rl     = slave.rl;
             slave_saved.funct3 = slave.funct3;
-            state              = if master.ready ? State::WaitValid : State::WaitReady;
+            if slave.is_amo {
+                case slave.amoop {
+                    AMOOp::LR: {
+                        // reserve address
+                        is_addr_reserved = 1;
+                        reserved_addr    = slave.addr;
+                        state            = if master.ready ? State::WaitValid : State::WaitReady;
+                    }
+                    default: {}
+                }
+            } else {
+                state = if master.ready ? State::WaitValid : State::WaitReady;
+            }
         } else {
             state = State::Init;
         }
@@ -118,6 +146,8 @@ module amounit (
         slave_saved.aq     = 0;
         slave_saved.rl     = 0;
         slave_saved.funct3 = 0;
+        is_addr_reserved   = 0;
+        reserved_addr      = 0;
     }
 
     always_ff {
