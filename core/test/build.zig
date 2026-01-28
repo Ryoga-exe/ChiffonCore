@@ -42,7 +42,7 @@ pub fn build(b: *std.Build) void {
     const elf = hello.getEmittedBin();
     const bin = elf2bin(b, elf, "hello.bin");
     const hex = bin2hex(b, bin, .{
-        .bytes_per_line = 8,
+        .bytes_per_line = 4,
         .basename = "hello.bin.hex",
     });
 
