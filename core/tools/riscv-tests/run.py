@@ -2,7 +2,7 @@ import argparse
 import os
 import re
 import subprocess
-from pathlib import Patha
+from pathlib import Path
 
 from elftools.elf.elffile import ELFFile
 
