@@ -2,11 +2,28 @@ import argparse
 import os
 import re
 import subprocess
-from pathlib import Path
+from pathlib import Patha
+
+from elftools.elf.elffile import ELFFile
 
 PASS_PAT = re.compile(r"riscv-tests success!", re.IGNORECASE)
 FAIL_PAT = re.compile(r"riscv-tests failed!", re.IGNORECASE)
 XERR_PAT = re.compile(r"\b(ERROR|FATAL)\b", re.IGNORECASE)
+
+
+def extract_sym_addr(elf_path: Path, sym_name: str) -> int | None:
+    from elftools.elf.elffile import ELFFile
+    from elftools.elf.sections import SymbolTableSection
+
+    with elf_path.open("rb") as f:
+        ef = ELFFile(f)
+        for sec in ef.iter_sections():
+            if not isinstance(sec, SymbolTableSection):
+                continue
+            for sym in sec.iter_symbols():
+                if sym.name == sym_name:
+                    return int(sym["st_value"])
+    return None
 
 
 def discover_snapshot(workdir: Path, preferred_prefix: str = "tb_riscv_tests") -> str:
@@ -122,7 +139,32 @@ def main() -> int:
 
     ap.add_argument("--membase", default="20000000")
     ap.add_argument("--entry", default="00000000")
-    ap.add_argument("--tohost", default="80001000")
+    ap.add_argument(
+        "--tohost",
+        default="80001000",
+        help="fallback TOHOST (used when --tohost_from_elf is off or extraction fails)",
+    )
+    ap.add_argument(
+        "--tohost_from_elf",
+        action="store_true",
+        help="extract tohost/fromhost from matching .elf per test",
+    )
+    ap.add_argument(
+        "--elfdir",
+        default=None,
+        help="directory containing .elf files (default: <dir>/elf)",
+    )
+    ap.add_argument(
+        "--nm", default="riscv64-unknown-elf-nm", help="nm command (full path OK)"
+    )
+    ap.add_argument(
+        "--tohost_mask",
+        default=None,
+        help="optional hex mask applied to extracted tohost (e.g. 1fffffff)",
+    )
+    ap.add_argument(
+        "--pass_fromhost", action="store_true", help="also pass FROMHOST=... when found"
+    )
     ap.add_argument(
         "--tb_timeout",
         default="5000000",
@@ -169,7 +211,6 @@ def main() -> int:
     plusargs_base = [
         f"MEMBASE={args.membase}",
         f"ENTRY={args.entry}",
-        f"TOHOST={args.tohost}",
         f"TIMEOUT={args.tb_timeout}",
     ]
 
@@ -177,7 +218,23 @@ def main() -> int:
 
     for idx, f in enumerate(files):
         out_log = out_dir / f"{f.name}.log.txt"
-        plusargs = plusargs_base + [f"HEX={str(to_posix_path(f))}"]
+        tohost_arg = args.tohost
+        fromhost_arg = None
+        if args.tohost_from_elf:
+            elfdir = Path(args.elfdir).resolve() if args.elfdir else (tests_dir / "elf")
+            elf_path = elfdir / f"{f.stem}.elf"
+            th, fh = extract_sym_addr(elf_path, args.nm)
+            if th is not None:
+                if args.tohost_mask:
+                    th &= int(args.tohost_mask, 16)
+                tohost_arg = format(th, "x")
+            if args.pass_fromhost and fh is not None:
+                fromhost_arg = format(fh, "x")
+
+        plusargs = plusargs_base + [f"TOHOST={tohost_arg}"]
+        if fromhost_arg is not None:
+            plusargs += [f"FROMHOST={fromhost_arg}"]
+        plusargs += [f"HEX={str(to_posix_path(f))}"]
 
         # print command only for the first test unless verbose
         show_cmd = args.verbose and idx < 3
