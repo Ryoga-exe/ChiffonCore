@@ -14,6 +14,7 @@ module csrunit (
     csr_addr   : input   logic           <12>, /// CSR address specified by the instruction (upper 12 bits of the instruction)
     rs1_addr   : input   logic           <5> , /// `rs1` address
     rs1_data   : input   UIntX               , /// `rs1` data
+    can_intr   : input   logic               , /// Can an interrupt be generated?
     rdata      : output  UIntX               , /// Result of reading the CSR by the CSR instruction
     raise_trap : output  logic               , /// 1 when raise trap
     trap_vector: output  Addr                , /// Address to jump to when an exception occurs
@@ -64,6 +65,11 @@ module csrunit (
     // mstatus bits
     let mstatus_mpie: logic = mstatus[7];
     let mstatus_mie : logic = mstatus[3];
+
+    // Interrupt
+    let raise_interrupt : logic = valid && can_intr && mstatus_mie && (mip & mie) != 0;
+    let interrupt_cause : UIntX = CsrCause::MACHINE_SOFTWARE_INTERRUPT;
+    let interrupt_vector: Addr  = mtvec;
 
     var wmask: UIntX; // write mask
     var wdata: UIntX; // write data
@@ -123,10 +129,10 @@ module csrunit (
             mcycle += 1;
             if valid {
                 if raise_trap {
-                    if raise_expt {
+                    if raise_expt || raise_interrupt {
                         mepc   = pc;
                         mcause = trap_cause;
-                        mtval  = expt_value;
+                        mtval  = if raise_expt ? expt_value : 0;
                         // save mstatus.mie to mstatus.mpie
                         // and set mstatus.mie = 0
                         mstatus[7] = mstatus[3];
@@ -170,10 +176,19 @@ module csrunit (
     };
 
     // Trap Return
-    assign trap_return = valid && is_mret && !raise_expt;
+    assign trap_return = valid && is_mret && !raise_expt && !raise_interrupt;
 
     // Trap
-    assign raise_trap  = raise_expt || trap_return;
-    let trap_cause : UIntX = expt_cause;
-    assign trap_vector = if raise_expt ? mtvec : mepc;
+    assign raise_trap = raise_expt || raise_interrupt || trap_return;
+    let trap_cause: UIntX = switch {
+        raise_expt     : expt_cause,
+        raise_interrupt: interrupt_cause,
+        default        : 0,
+    };
+    assign trap_vector = switch {
+        raise_expt     : mtvec,
+        raise_interrupt: interrupt_vector,
+        trap_return    : mepc,
+        default        : 0,
+    };
 }
