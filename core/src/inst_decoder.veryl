@@ -101,7 +101,7 @@ module inst_decoder (
                     InstType::R, T, F, T, f7 == 7'b0000001, F, F, F, F, F
                 },
                 OP_OP_IMM: {
-                    InstType::I, T, F, T, F, F, F, F, F
+                    InstType::I, T, F, T, F, F, F, F, F, F
                 },
                 OP_OP_32: {
                     InstType::R, T, F, T, f7 == 7'b0000001, T, F, F, F, F
