@@ -259,9 +259,6 @@ module top #(
   assign M_AXI_WUSER = {C_M_AXI_WUSER_WIDTH{1'b0}};
   assign M_AXI_ARUSER = {C_M_AXI_ARUSER_WIDTH{1'b0}};
 
-  // UART idle
-  assign UART_TX = 1'b1;
-
   // Unused read side fields
   assign M_AXI_ARUSER = {C_M_AXI_ARUSER_WIDTH{1'b0}};
 
