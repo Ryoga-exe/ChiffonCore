@@ -5,12 +5,6 @@ package pipeline {
     // ====================================================
     // * FIFO types
     // ====================================================
-    // IF -> ID
-    struct if_fifo_type {
-        addr: Addr,
-        bits: Inst,
-    }
-
     // ID -> EX
     struct exq_type {
         addr: Addr         ,
