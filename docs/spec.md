@@ -85,26 +85,26 @@ c.f: https://msyksphinz-self.github.io/riscv-isadoc/html/index.html
 |                 | remuw       | ✅     |
 | RV64A (RV32A)   | lr.w        | wip    |
 |                 | sc.w        | wip    |
-|                 | amoswap.w   |        |
-|                 | amoadd.w    |        |
-|                 | amoxor.w    |        |
-|                 | amoand.w    |        |
-|                 | amoor.w     |        |
-|                 | amomin.w    |        |
-|                 | amomax.w    |        |
-|                 | amominu.w   |        |
-|                 | amomaxu.w   |        |
+|                 | amoswap.w   | wip    |
+|                 | amoadd.w    | wip    |
+|                 | amoxor.w    | wip    |
+|                 | amoand.w    | wip    |
+|                 | amoor.w     | wip    |
+|                 | amomin.w    | wip    |
+|                 | amomax.w    | wip    |
+|                 | amominu.w   | wip    |
+|                 | amomaxu.w   | wip    |
 | RV64A           | lr.d        | wip    |
 |                 | sc.d        | wip    |
-|                 | amoswap.d   |        |
-|                 | amoadd.d    |        |
-|                 | amoxor.d    |        |
-|                 | amoand.d    |        |
-|                 | amoor.d     |        |
-|                 | amomin.d    |        |
-|                 | amomax.d    |        |
-|                 | amominu.d   |        |
-|                 | amomaxu.d   |        |
+|                 | amoswap.d   | wip    |
+|                 | amoadd.d    | wip    |
+|                 | amoxor.d    | wip    |
+|                 | amoand.d    | wip    |
+|                 | amoor.d     | wip    |
+|                 | amomin.d    | wip    |
+|                 | amomax.d    | wip    |
+|                 | amominu.d   | wip    |
+|                 | amomaxu.d   | wip    |
 | RV64D (RV32F)   | fmadd.s     |        |
 |                 | fmsub.s     |        |
 |                 | fnmsub.s    |        |
