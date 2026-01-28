@@ -27,6 +27,14 @@ package eei {
     const MMAP_ROM_BEGIN: Addr = 'h1000 as Addr;
     const MMAP_ROM_END  : Addr = MMAP_ROM_BEGIN + 'h3ff as Addr;
 
+    // ACLINT
+    const MMAP_ACLINT_BEGIN   : Addr = 'h200_0000 as Addr;
+    const MMAP_ACLINT_MSIP    : Addr = 0;
+    const MMAP_ACLINT_MTIMECMP: Addr = 'h4000 as Addr;
+    const MMAP_ACLINT_MTIME   : Addr = 'h7ff8 as Addr;
+    const MMAP_ACLINT_SETSSIP : Addr = 'h8000 as Addr;
+    const MMAP_ACLINT_END     : Addr = MMAP_ACLINT_BEGIN + 'hbfff as Addr;
+
     // UART (16550)
     const MMAP_UART_BEGIN: Addr = 'h1000_0000 as Addr;
     const MMAP_UART_END  : Addr = MMAP_UART_BEGIN + 'h3ff as Addr;
