@@ -83,8 +83,8 @@ c.f: https://msyksphinz-self.github.io/riscv-isadoc/html/index.html
 |                 | divuw       | ✅     |
 |                 | remw        | ✅     |
 |                 | remuw       | ✅     |
-| RV64A (RV32A)   | lr.w        |        |
-|                 | sc.w        |        |
+| RV64A (RV32A)   | lr.w        | wip    |
+|                 | sc.w        | wip    |
 |                 | amoswap.w   |        |
 |                 | amoadd.w    |        |
 |                 | amoxor.w    |        |
@@ -94,8 +94,8 @@ c.f: https://msyksphinz-self.github.io/riscv-isadoc/html/index.html
 |                 | amomax.w    |        |
 |                 | amominu.w   |        |
 |                 | amomaxu.w   |        |
-| RV64A           | lr.d        |        |
-|                 | sc.d        |        |
+| RV64A           | lr.d        | wip    |
+|                 | sc.d        | wip    |
 |                 | amoswap.d   |        |
 |                 | amoadd.d    |        |
 |                 | amoxor.d    |        |
