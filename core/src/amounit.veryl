@@ -12,6 +12,10 @@ module amounit (
         WaitValid,
         SCSuccess,
         SCFail,
+        AMOLoadReady,
+        AMOLoadValid,
+        AMOStoreReady,
+        AMOStoreValid,
     }
     var state      : State;
     inst slave_saved: core_data_if;
@@ -28,6 +32,9 @@ module amounit (
     var is_addr_reserved: logic;
     var reserved_addr   : Addr ;
 
+    // amo
+    var zaamo_fetched_data: UIntX;
+
     // Assign request to master
     function assign_master (
         addr : input Addr                   ,
@@ -42,6 +49,48 @@ module amounit (
         master.wmask = wmask;
     }
 
+    // AMO ALU
+    function calc_amo::<W: u32> (
+        amoop: input AMOOp   ,
+        wdata: input logic<W>,
+        rdata: input logic<W>,
+    ) -> logic<W> {
+        let lts: logic = $signed(wdata) <: $signed(rdata);
+        let ltu: logic = wdata <: rdata;
+
+        return case amoop {
+            AMOOp::SWAP: wdata,
+            AMOOp::ADD : rdata + wdata,
+            AMOOp::XOR : rdata ^ wdata,
+            AMOOp::AND : rdata & wdata,
+            AMOOp::OR  : rdata | wdata,
+            AMOOp::MIN : if lts ? wdata : rdata,
+            AMOOp::MAX : if !lts ? wdata : rdata,
+            AMOOp::MINU: if ltu ? wdata : rdata,
+            AMOOp::MAXU: if !ltu ? wdata : rdata,
+            default    : 0,
+        };
+    }
+
+    // Generate wdata for Zaamo extension
+    function gen_amo_wdata (
+        req  : modport core_data_if::all_input,
+        rdata: input   UIntX                  ,
+    ) -> UIntX {
+        case req.funct3 {
+            3'b010: {
+                // word
+                let low    : logic  = req.addr[2] == 0;
+                let rdata32: UInt32 = if low ? rdata[31:0] : rdata[63:32];
+                let wdata32: UInt32 = if low ? req.wdata[31:0] : req.wdata[63:32];
+                let result : UInt32 = calc_amo::<32>(req.amoop, wdata32, rdata32);
+                return if low ? {rdata[63:32], result} : {result, rdata[31:0]};
+            }
+            3'b011 : return calc_amo::<64>(req.amoop, req.wdata, rdata); // double
+            default: return 0;
+        }
+    }
+
     // Accept new request
     function accept_request_comb () {
         if slave.ready && slave.valid {
@@ -51,7 +100,9 @@ module amounit (
                     AMOOp::SC: if is_addr_reserved && slave.addr == reserved_addr {
                         assign_master(slave.addr, 1, slave.wdata, slave.wmask);
                     }
-                    default: {}
+                    default: if slave.is_Zaamo() {
+                        assign_master(slave.addr, 0, 0, 0);
+                    }
                 }
             } else {
                 assign_master(slave.addr, slave.wen, slave.wdata, slave.wmask);
@@ -84,6 +135,11 @@ module amounit (
                 slave.rvalid = 1;
                 slave.rdata  = 1;
             }
+            State::AMOStoreValid: {
+                slave.ready  = master.rvalid;
+                slave.rvalid = master.rvalid;
+                slave.rdata  = zaamo_fetched_data;
+            }
             default: {}
         }
     }
@@ -102,9 +158,16 @@ module amounit (
             } else {
                 assign_master(slave_saved.addr, slave_saved.wen, slave_saved.wdata, slave_saved.wmask);
             }
-            State::WaitValid               : accept_request_comb();
-            State::SCFail, State::SCSuccess: accept_request_comb();
-            default                        : {}
+            State::WaitValid                         : accept_request_comb();
+            State::SCFail, State::SCSuccess          : accept_request_comb();
+            State::AMOLoadReady                      : assign_master      (slave_saved.addr, 0, 0, 0);
+            State::AMOLoadValid, State::AMOStoreReady: {
+                let rdata        : UIntX = if state == State::AMOLoadValid ? master.rdata : zaamo_fetched_data;
+                let wdata        : UIntX = gen_amo_wdata(slave_saved, rdata);
+                assign_master(slave_saved.addr, 1, wdata, slave_saved.wmask);
+            }
+            State::AMOStoreValid: accept_request_comb();
+            default             : {}
         }
     }
 
@@ -140,7 +203,9 @@ module amounit (
                             state = State::SCFail;
                         }
                     }
-                    default: {}
+                    default: if slave.is_Zaamo() {
+                        state = if master.ready ? State::AMOLoadValid : State::AMOLoadReady;
+                    }
                 }
             } else {
                 state = if master.ready ? State::WaitValid : State::WaitReady;
@@ -166,8 +231,21 @@ module amounit (
             State::SCSuccess: if master.rvalid {
                 accept_request_ff();
             }
-            State::SCFail: accept_request_ff();
-            default      : {}
+            State::SCFail      : accept_request_ff();
+            State::AMOLoadReady: if master.ready {
+                state = State::AMOLoadValid;
+            }
+            State::AMOLoadValid: if master.rvalid {
+                zaamo_fetched_data = master.rdata;
+                state              = if slave.ready ? State::AMOStoreValid : State::AMOStoreReady;
+            }
+            State::AMOStoreReady: if master.ready {
+                state = State::AMOStoreValid;
+            }
+            State::AMOStoreValid: if master.rvalid {
+                accept_request_ff();
+            }
+            default: {}
         }
     }
 
@@ -184,6 +262,7 @@ module amounit (
         slave_saved.funct3 = 0;
         is_addr_reserved   = 0;
         reserved_addr      = 0;
+        zaamo_fetched_data = 0;
     }
 
     always_ff {
