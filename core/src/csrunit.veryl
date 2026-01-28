@@ -17,6 +17,8 @@ module csrunit (
     rdata      : output UIntX            , /// Result of reading the CSR by the CSR instruction
     raise_trap : output logic            , /// 1 when raise trap
     trap_vector: output Addr             , /// Address to jump to when an exception occurs
+    trap_return: output logic            , /// Is this an instruction to return from a trap?
+    minstret   : input  UInt64           , /// minstret value
     led        : output UIntX            , // LED
 ) {
     // CSRR(W|S|C)[I] inst?
@@ -46,17 +48,18 @@ module csrunit (
     always_comb {
         // read
         rdata = case csr_addr {
-            CsrAddr::MISA   : misa,
-            CsrAddr::MIMPID : MACHINE_IMPLEMENTATION_ID,
-            CsrAddr::MHARTID: mhartid,
-            CsrAddr::MSTATUS: mstatus,
-            CsrAddr::MTVEC  : mtvec,
-            CsrAddr::MCYCLE : mcycle,
-            CsrAddr::MEPC   : mepc,
-            CsrAddr::MCAUSE : mcause,
-            CsrAddr::MTVAL  : mtval,
-            CsrAddr::LED    : led,
-            default         : 'x,
+            CsrAddr::MISA    : misa,
+            CsrAddr::MIMPID  : MACHINE_IMPLEMENTATION_ID,
+            CsrAddr::MHARTID : mhartid,
+            CsrAddr::MSTATUS : mstatus,
+            CsrAddr::MTVEC   : mtvec,
+            CsrAddr::MCYCLE  : mcycle,
+            CsrAddr::MINSTRET: minstret,
+            CsrAddr::MEPC    : mepc,
+            CsrAddr::MCAUSE  : mcause,
+            CsrAddr::MTVAL   : mtval,
+            CsrAddr::LED     : led,
+            default          : 'x,
         };
         // write
         wmask = case csr_addr {
@@ -109,7 +112,6 @@ module csrunit (
                         }
                     }
                 }
-
             }
         }
     }
@@ -127,8 +129,11 @@ module csrunit (
         default                                    : 0
     };
 
+    // Trap Return
+    assign trap_return = valid && is_mret && !raise_expt;
+
     // Trap
-    assign raise_trap  = raise_expt || (valid && is_mret);
+    assign raise_trap  = raise_expt || trap_return;
     let trap_cause : UIntX = expt_cause;
     assign trap_vector = if raise_expt ? mtvec : mepc;
 }
