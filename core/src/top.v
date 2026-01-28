@@ -155,8 +155,6 @@ module top #(
 
   // NOTE: `core_port` is provided as Veryl wrapper (core_port.veryl).
   // It exposes the membus signals as plain ports (no SV interface on top-level).
-  // NOTE: `core_port` is provided as Veryl wrapper (core_port.veryl).
-  // It exposes the membus signals as plain ports (no SV interface on top-level).
   core_port u_core (
       .clk(ACLK),
       .rst(CORE_RST),
@@ -170,12 +168,14 @@ module top #(
       .ram_membus_rvalid(ram_rvalid),
       .ram_membus_rdata (ram_rdata),
 
+      .uart_rxd(UART_RX),
+      .uart_txd(UART_TX),
+
       .led(csr_led)
   );
 
   //-------------------------------------------------------------------------
   // membus -> AXI adapter
-
   //-------------------------------------------------------------------------
   wire [31:0] last_pc;
 
@@ -255,9 +255,6 @@ module top #(
   assign M_AXI_AWUSER = {C_M_AXI_AWUSER_WIDTH{1'b0}};
   assign M_AXI_WUSER = {C_M_AXI_WUSER_WIDTH{1'b0}};
   assign M_AXI_ARUSER = {C_M_AXI_ARUSER_WIDTH{1'b0}};
-
-  // UART idle
-  assign UART_TX = 1'b1;
 
   // Unused read side fields
   assign M_AXI_ARUSER = {C_M_AXI_ARUSER_WIDTH{1'b0}};

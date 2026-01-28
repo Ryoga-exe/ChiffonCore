@@ -1,0 +1,76 @@
+module receiver #(
+    param CLOCK_FREQUENCY: u32 = 100_000_000,
+    param BAUD_RATE      : u32 = 115200     ,
+    param WORD_WIDTH     : u32 = 8          ,
+) (
+    clk : input  clock            ,
+    rst : input  reset            ,
+    din : input  logic            ,
+    dout: output logic<WORD_WIDTH>,
+    full: input  logic            ,
+    we  : output logic            ,
+) {
+    const CLOCKS_PER_BIT: u32 = CLOCK_FREQUENCY / BAUD_RATE;
+
+    enum State {
+        Wait,
+        ReceiveBits,
+        WriteWord,
+    }
+
+    var state            : State                ;
+    var data             : logic<WORD_WIDTH + 2>;
+    var clock_counts     : logic<32>            ;
+    var half_clock_counts: logic                ;
+    var full_clock_counts: logic                ;
+
+    assign dout = data[WORD_WIDTH:1];
+    assign we   = (state == State::WriteWord);
+
+    always_ff {
+        if_reset {
+            state = State::Wait;
+        } else {
+            case state {
+                State::Wait       : state = if ~din ? State::ReceiveBits : state;
+                State::ReceiveBits: if full_clock_counts {
+                    if ~data[0] {
+                        state = if data[WORD_WIDTH + 1] && ~full ? State::WriteWord : State::Wait;
+                    } else {
+                        state = if data == {1'b1 repeat WORD_WIDTH + 2} ? State::Wait : state;
+                    }
+                } else {
+                    state = state;
+                }
+                State::WriteWord: state = State::Wait;
+                default         : state = state;
+            }
+        }
+    }
+
+    always_ff {
+        if_reset {
+            data = {1'b1 repeat WORD_WIDTH + 2};
+        } else {
+            data = case state {
+                State::ReceiveBits: if half_clock_counts ? {din, data[WORD_WIDTH + 1:1]} : data,
+                State::WriteWord  : data,
+                default           : {1'b1 repeat WORD_WIDTH + 2},
+            };
+        }
+    }
+
+    always_ff {
+        if_reset {
+            clock_counts = 32'h0;
+        } else {
+            clock_counts = case state {
+                State::ReceiveBits: if full_clock_counts ? 32'h0 : clock_counts + 32'h1,
+                default           : 32'h0,
+            };
+        }
+    }
+
+    assign half_clock_counts = (clock_counts == (CLOCKS_PER_BIT / 2));
+    assign full_clock_counts = (clock_counts == (CLOCKS_PER_BIT - 1));
+}

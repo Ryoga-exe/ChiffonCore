@@ -30,6 +30,10 @@ foreach path $repo_list {
 set_property IP_REPO_PATHS $cur_repo [current_project]
 update_ip_catalog
 
+# --- Add FIFO IP (XCI) ---------------------------------
+import_ip core/ip/fifo_8in8out_1024depth.xci
+update_ip_catalog
+
 # --- Add RTL Sources (core as module-ref, not packaged IP) ---
 # Veryl output
 add_files -fileset sources_1 [glob -nocomplain core/target/*.sv]
@@ -45,7 +49,7 @@ if {![file exists $bootrom_hex]} {
 }
 add_files -fileset sources_1 -norecurse $bootrom_hex
 # Mark as "Memory Initialization Files"
-set_property file_type {Memory Initialization Files} [get_files bootrom.hex]
+set_property file_type {Memory Initialization Files} [get_files -of_objects [get_filesets sources_1] $bootrom_hex]
 
 update_compile_order -fileset sources_1
 

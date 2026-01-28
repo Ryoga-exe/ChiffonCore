@@ -18,11 +18,15 @@ module core_port #(
     ram_membus_rvalid: input  logic                    ,
     ram_membus_rdata : input  logic<RAM_DATA_WIDTH>    ,
 
+    uart_rxd: input  logic,
+    uart_txd: output logic,
+
     led: output UIntX,
 ) {
-    inst mmio_membus    : Membus;
-    inst mmio_ram_membus: Membus;
-    inst mmio_rom_membus: Membus;
+    inst mmio_membus     : Membus;
+    inst mmio_ram_membus : Membus;
+    inst mmio_rom_membus : Membus;
+    inst mmio_uart_membus: Membus;
 
     inst rom_membus: membus_if::<ROM_DATA_WIDTH, ROM_ADDR_WIDTH>;
 
@@ -110,12 +114,25 @@ module core_port #(
         membus: rom_membus,
     );
 
+    // UART MMIO (16550-like)
+    inst uart0: uart_mmio #(
+        CLOCK_FREQUENCY: 125_000_000,
+        BAUD_RATE      : 115200     ,
+    ) (
+        clk                     ,
+        rst                     ,
+        rxd   : uart_rxd        ,
+        txd   : uart_txd        ,
+        membus: mmio_uart_membus,
+    );
+
     inst mmioc: mmio_controller (
-        clk                        ,
-        rst                        ,
-        req_core  : mmio_membus    ,
-        ram_membus: mmio_ram_membus,
-        rom_membus: mmio_rom_membus,
+        clk                          ,
+        rst                          ,
+        req_core   : mmio_membus     ,
+        ram_membus : mmio_ram_membus ,
+        rom_membus : mmio_rom_membus ,
+        uart_membus: mmio_uart_membus,
     );
 
     inst u_core: core (
