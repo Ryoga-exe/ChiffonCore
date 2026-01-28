@@ -65,6 +65,12 @@ package eei {
         MAXU = 5'b11100,
     }
 
+    enum PrivMode: logic<2> {
+        M = 2'b11,
+        S = 2'b01,
+        U = 2'b00,
+    }
+
     // CSR Address
     enum CsrAddr: logic<12> {
         MTVEC = 12'h305,
