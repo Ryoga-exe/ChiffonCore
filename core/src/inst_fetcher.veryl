@@ -1,0 +1,242 @@
+import eei::*;
+
+module inst_fetcher (
+    clk    : input   clock              ,
+    rst    : input   reset              ,
+    core_if: modport core_inst_if::slave,
+    mem_if : modport Membus::master     ,
+) {
+    // FIFO
+    struct fetch_fifo_type {
+        addr: Addr                    ,
+        bits: logic<MEMBUS_DATA_WIDTH>,
+    }
+
+    var fetch_fifo_flush : logic          ;
+    var fetch_fifo_wvalid: logic          ;
+    var fetch_fifo_wready: logic          ;
+    var fetch_fifo_wdata : fetch_fifo_type;
+    var fetch_fifo_rdata : fetch_fifo_type;
+    var fetch_fifo_rready: logic          ;
+    var fetch_fifo_rvalid: logic          ;
+
+    inst fetch_fifo: fifo #(
+        DATA_TYPE: fetch_fifo_type,
+        WIDTH    : 3              ,
+    ) (
+        clk                          ,
+        rst                          ,
+        flush     : fetch_fifo_flush ,
+        wready    : _                ,
+        wready_two: fetch_fifo_wready,
+        wvalid    : fetch_fifo_wvalid,
+        wdata     : fetch_fifo_wdata ,
+        rready    : fetch_fifo_rready,
+        rvalid    : fetch_fifo_rvalid,
+        rdata     : fetch_fifo_rdata ,
+    );
+
+    struct issue_fifo_type {
+        addr  : Addr ,
+        bits  : Inst ,
+        is_rvc: logic,
+    }
+
+    var issue_fifo_flush : logic          ;
+    var issue_fifo_wvalid: logic          ;
+    var issue_fifo_wready: logic          ;
+    var issue_fifo_wdata : issue_fifo_type;
+    var issue_fifo_rdata : issue_fifo_type;
+    var issue_fifo_rready: logic          ;
+    var issue_fifo_rvalid: logic          ;
+
+    inst issue_fifo: fifo #(
+        DATA_TYPE: issue_fifo_type,
+        WIDTH    : 3              ,
+    ) (
+        clk                      ,
+        rst                      ,
+        flush : issue_fifo_flush ,
+        wready: issue_fifo_wready,
+        wvalid: issue_fifo_wvalid,
+        wdata : issue_fifo_wdata ,
+        rready: issue_fifo_rready,
+        rvalid: issue_fifo_rvalid,
+        rdata : issue_fifo_rdata ,
+    );
+
+    // fetch
+    var fetch_pc          : Addr ;
+    var fetch_requested   : logic;
+    var fetch_pc_requested: Addr ;
+
+    // Assign request to mem
+    always_comb {
+        mem_if.valid = 0;
+        mem_if.addr  = 0;
+        mem_if.wen   = 0;
+        mem_if.wdata = 0;
+        mem_if.wmask = 0;
+
+        if !core_if.is_hazard {
+            mem_if.valid = fetch_fifo_wready;
+            if fetch_requested {
+                mem_if.valid = mem_if.valid && mem_if.rvalid;
+            }
+            mem_if.addr = fetch_pc;
+        }
+    }
+
+    // Update state
+    always_ff {
+        if_reset {
+            fetch_pc           = INITIAL_PC;
+            fetch_requested    = 0;
+            fetch_pc_requested = 0;
+        } else {
+            if core_if.is_hazard {
+                fetch_pc           = {core_if.next_pc[XLEN - 1:3], 3'b0};
+                fetch_requested    = 0;
+                fetch_pc_requested = 0;
+            } else {
+                if fetch_requested {
+                    if mem_if.rvalid {
+                        fetch_requested = mem_if.ready && mem_if.valid;
+                        if mem_if.ready && mem_if.valid {
+                            fetch_pc_requested =  fetch_pc;
+                            fetch_pc           += 8;
+                        }
+                    }
+                } else {
+                    if mem_if.ready && mem_if.valid {
+                        fetch_requested    =  1;
+                        fetch_pc_requested =  fetch_pc;
+                        fetch_pc           += 8;
+                    }
+                }
+            }
+        }
+    }
+
+    // memory -> fetch_fifo
+    always_comb {
+        fetch_fifo_flush      = core_if.is_hazard;
+        fetch_fifo_wvalid     = fetch_requested && mem_if.rvalid;
+        fetch_fifo_wdata.addr = fetch_pc_requested;
+        fetch_fifo_wdata.bits = mem_if.rdata;
+    }
+
+    // issue
+    var issue_pc_offset: logic<3>;
+
+    var issue_is_rdata_saved: logic    ;
+    var issue_saved_addr    : Addr     ;
+    var issue_saved_bits    : logic<16>; // rdata[63:48]
+
+    // instruction converter
+    var rvcc_is_rvc: logic;
+    var rvcc_inst32: Inst ;
+
+    inst rvcc: rvc_converter (
+        inst16: case issue_pc_offset {
+            0      : fetch_fifo_rdata.bits[15:0],
+            2      : fetch_fifo_rdata.bits[31:16],
+            4      : fetch_fifo_rdata.bits[47:32],
+            6      : fetch_fifo_rdata.bits[63:48],
+            default: 0,
+        },
+        is_rvc: rvcc_is_rvc,
+        inst32: rvcc_inst32,
+    );
+
+    always_ff {
+        if_reset {
+            issue_pc_offset = 0;
+
+            issue_is_rdata_saved = 0;
+            issue_saved_addr     = 0;
+            issue_saved_bits     = 0;
+        } else {
+            if core_if.is_hazard {
+                issue_pc_offset      = core_if.next_pc[2:0];
+                issue_is_rdata_saved = 0;
+            } else {
+                // If 32-bit instruction with an offset of 6,
+                // save the address and the upper 16 bits, then proceed to read the FIFO:
+                if issue_pc_offset == 6 && !rvcc_is_rvc && !issue_is_rdata_saved {
+                    if fetch_fifo_rvalid {
+                        issue_is_rdata_saved = 1;
+                        issue_saved_addr     = fetch_fifo_rdata.addr;
+                        issue_saved_bits     = fetch_fifo_rdata.bits[63:48];
+                    }
+                } else {
+                    if issue_fifo_wready && issue_fifo_wvalid {
+                        issue_pc_offset      += if issue_is_rdata_saved || !rvcc_is_rvc ? 4 : 2;
+                        issue_is_rdata_saved =  0;
+                    }
+                }
+            }
+        }
+    }
+
+    // fetch_fifo <-> issue_fifo
+    always_comb {
+        let raddr : Addr                     = fetch_fifo_rdata.addr;
+        let rdata : logic<MEMBUS_DATA_WIDTH> = fetch_fifo_rdata.bits;
+        let offset: logic<3>                 = issue_pc_offset;
+
+        // default values
+        fetch_fifo_rready = 0;
+        issue_fifo_wvalid = 0;
+        issue_fifo_wdata  = 0;
+
+        if !core_if.is_hazard && fetch_fifo_rvalid {
+            if offset == 6 {
+                // For a 32-bit instruction with an offset of 6,
+                // the instruction will be {rdata_next[15:0], rdata[63:48]}
+                if issue_is_rdata_saved {
+                    issue_fifo_wvalid       = 1;
+                    issue_fifo_wdata.addr   = {issue_saved_addr[msb:3], offset};
+                    issue_fifo_wdata.bits   = {rdata[15:0], issue_saved_bits};
+                    issue_fifo_wdata.is_rvc = 0;
+                } else {
+                    if rvcc_is_rvc {
+                        fetch_fifo_rready       = issue_fifo_wready;
+                        issue_fifo_wvalid       = 1;
+                        issue_fifo_wdata.addr   = {raddr[msb:3], offset};
+                        issue_fifo_wdata.is_rvc = 1;
+                        issue_fifo_wdata.bits   = rvcc_inst32;
+                    } else {
+                        // save inst[15:0]
+                        fetch_fifo_rready = 1; // Read next 8 bytes
+                    }
+                }
+            } else {
+                fetch_fifo_rready     = (issue_fifo_wready && !rvcc_is_rvc && offset == 4);
+                issue_fifo_wvalid     = 1;
+                issue_fifo_wdata.addr = {raddr[msb:3], offset};
+                if rvcc_is_rvc {
+                    issue_fifo_wdata.bits = rvcc_inst32;
+                } else {
+                    issue_fifo_wdata.bits = case offset {
+                        0      : rdata[31:0],
+                        2      : rdata[47:16],
+                        4      : rdata[63:32],
+                        default: 0,
+                    };
+                    issue_fifo_wdata.is_rvc = rvcc_is_rvc;
+                }
+            }
+        }
+    }
+
+    // issue_fifo <-> core
+    always_comb {
+        issue_fifo_flush  = core_if.is_hazard;
+        issue_fifo_rready = core_if.rready;
+        core_if.rvalid    = issue_fifo_rvalid;
+        core_if.raddr     = issue_fifo_rdata.addr;
+        core_if.rdata     = issue_fifo_rdata.bits;
+        core_if.is_rvc    = issue_fifo_rdata.is_rvc;
+    }
+}

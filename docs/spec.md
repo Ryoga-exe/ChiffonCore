@@ -167,45 +167,45 @@ c.f: https://msyksphinz-self.github.io/riscv-isadoc/html/index.html
 |                 | fcvt.d.l    |        |
 |                 | fcvt.d.lu   |        |
 |                 | fmv.d.x     |        |
-| RV64C (RV32C)   | c.addi4spn  |        |
-|                 | c.fld       |        |
-|                 | c.lw        |        |
-|                 | c.flw       |        |
-|                 | c.ld        |        |
-|                 | c.fsd       |        |
-|                 | c.sw        |        |
-|                 | c.fsw       |        |
-|                 | c.sd        |        |
-|                 | c.nop       |        |
-|                 | c.addi      |        |
-|                 | c.jal       |        |
-|                 | c.addiw     |        |
-|                 | c.li        |        |
-|                 | c.addi16sp  |        |
-|                 | c.lui       |        |
-|                 | c.srli      |        |
-|                 | c.srai      |        |
-|                 | c.andi      |        |
-|                 | c.sub       |        |
-|                 | c.xor       |        |
-|                 | c.or        |        |
-|                 | c.and       |        |
-|                 | c.subw      |        |
-|                 | c.addw      |        |
-|                 | c.j         |        |
-|                 | c.beqz      |        |
-|                 | c.bnez      |        |
-|                 | c.slli      |        |
-|                 | c.fldsp     |        |
-|                 | c.lwsp      |        |
-|                 | c.flwsp     |        |
-|                 | c.ldsp      |        |
-|                 | c.jr        |        |
-|                 | c.mv        |        |
-|                 | c.ebreak    |        |
-|                 | c.jalr      |        |
-|                 | c.add       |        |
-|                 | c.fsdsp     |        |
-|                 | c.swsp      |        |
-|                 | c.fswsp     |        |
-|                 | c.sdsp      |        |
+| RV64C (RV32C)   | c.addi4spn  | ✅     |
+|                 | c.fld       | ✅     |
+|                 | c.lw        | ✅     |
+|                 | c.flw       | ✅     |
+|                 | c.ld        | ✅     |
+|                 | c.fsd       | ✅     |
+|                 | c.sw        | ✅     |
+|                 | c.fsw       | ✅     |
+|                 | c.sd        | ✅     |
+|                 | c.nop       | ✅     |
+|                 | c.addi      | ✅     |
+|                 | c.jal       | ✅     |
+|                 | c.addiw     | ✅     |
+|                 | c.li        | ✅     |
+|                 | c.addi16sp  | ✅     |
+|                 | c.lui       | ✅     |
+|                 | c.srli      | ✅     |
+|                 | c.srai      | ✅     |
+|                 | c.andi      | ✅     |
+|                 | c.sub       | ✅     |
+|                 | c.xor       | ✅     |
+|                 | c.or        | ✅     |
+|                 | c.and       | ✅     |
+|                 | c.subw      | ✅     |
+|                 | c.addw      | ✅     |
+|                 | c.j         | ✅     |
+|                 | c.beqz      | ✅     |
+|                 | c.bnez      | ✅     |
+|                 | c.slli      | ✅     |
+|                 | c.fldsp     | ✅     |
+|                 | c.lwsp      | ✅     |
+|                 | c.flwsp     | ✅     |
+|                 | c.ldsp      | ✅     |
+|                 | c.jr        | ✅     |
+|                 | c.mv        | ✅     |
+|                 | c.ebreak    | ✅     |
+|                 | c.jalr      | ✅     |
+|                 | c.add       | ✅     |
+|                 | c.fsdsp     | ✅     |
+|                 | c.swsp      | ✅     |
+|                 | c.fswsp     | ✅     |
+|                 | c.sdsp      | ✅     |

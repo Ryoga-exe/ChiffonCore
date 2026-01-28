@@ -24,6 +24,7 @@ package corectrl {
         is_load  : logic      , // is load inst?
         is_csr   : logic      , // is CSR inst?
         is_amo   : logic      , // is AMO inst?
+        is_rvc   : logic      , // is RVC inst?
         funct3   : logic   <3>, // funct3 field in inst
         funct7   : logic   <7>, // funct7 field in inst
     }
