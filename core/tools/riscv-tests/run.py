@@ -139,6 +139,7 @@ def main() -> int:
 
     ap.add_argument("--membase", default="20000000")
     ap.add_argument("--entry", default="00000000")
+    ap.add_argument("--tohost", default="80001000")
     ap.add_argument("--tohost_from_elf", action="store_true")
     ap.add_argument("--elfdir", default=None, help="default: <dir>/elf")
     ap.add_argument(
