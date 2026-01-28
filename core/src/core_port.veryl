@@ -30,8 +30,11 @@ module core_port #(
 
     inst rom_membus: membus_if::<ROM_DATA_WIDTH, ROM_ADDR_WIDTH>;
 
-    inst i_membus     : membus_if::<ILEN, XLEN>; // for instruction fetch
-    inst d_membus     : Membus; // for load/store
+    // for instruction fetch
+    inst i_membus     : membus_if::<ILEN, XLEN>;
+    inst i_membus_core: core_inst_if;
+    // for load/store
+    inst d_membus     : Membus;
     inst d_membus_core: core_data_if;
 
     var memarb_last_i    : logic;
@@ -143,10 +146,17 @@ module core_port #(
         master: d_membus     ,
     );
 
+    inst fetcher: inst_fetcher (
+        clk                   ,
+        rst                   ,
+        core_if: i_membus_core,
+        mem_if : i_membus     ,
+    );
+
     inst u_core: core (
         clk                    ,
         rst                    ,
-        i_membus               ,
+        i_membus: i_membus_core,
         d_membus: d_membus_core,
         led                    ,
     );
