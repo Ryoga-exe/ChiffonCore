@@ -30,8 +30,9 @@ module core_port #(
 
     inst rom_membus: membus_if::<ROM_DATA_WIDTH, ROM_ADDR_WIDTH>;
 
-    inst i_membus: membus_if::<ILEN, XLEN>; // for instruction fetch
-    inst d_membus: Membus; // for load/store
+    inst i_membus     : membus_if::<ILEN, XLEN>; // for instruction fetch
+    inst d_membus     : Membus; // for load/store
+    inst d_membus_core: core_data_if;
 
     var memarb_last_i    : logic;
     var memarb_last_iaddr: Addr ;
@@ -135,11 +136,18 @@ module core_port #(
         uart_membus: mmio_uart_membus,
     );
 
+    inst amou: amounit (
+        clk                  ,
+        rst                  ,
+        slave : d_membus_core,
+        master: d_membus     ,
+    );
+
     inst u_core: core (
-        clk       ,
-        rst       ,
-        i_membus  ,
-        d_membus  ,
-        led       ,
+        clk                    ,
+        rst                    ,
+        i_membus               ,
+        d_membus: d_membus_core,
+        led                    ,
     );
 }
