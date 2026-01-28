@@ -31,11 +31,12 @@ module csrunit (
     var mode: PrivMode;
 
     // CSR
-    let misa  : UIntX = {2'd2, 1'b0 repeat XLEN - 28, 26'b00000000000001000100000101}; // M, I, C, A
-    var mtvec : UIntX;
-    var mepc  : UIntX;
-    var mcause: UIntX;
-    var mtval : UIntX;
+    let mhartid: UIntX = 0;
+    let misa   : UIntX = {2'd2, 1'b0 repeat XLEN - 28, 26'b00000000000001000100000101}; // M, I, C, A
+    var mtvec  : UIntX;
+    var mepc   : UIntX;
+    var mcause : UIntX;
+    var mtval  : UIntX;
 
     var wmask: UIntX; // write mask
     var wdata: UIntX; // write data
@@ -43,14 +44,15 @@ module csrunit (
     always_comb {
         // read
         rdata = case csr_addr {
-            CsrAddr::MISA  : misa,
-            CsrAddr::MIMPID: MACHINE_IMPLEMENTATION_ID,
-            CsrAddr::MTVEC : mtvec,
-            CsrAddr::MEPC  : mepc,
-            CsrAddr::MCAUSE: mcause,
-            CsrAddr::MTVAL : mtval,
-            CsrAddr::LED   : led,
-            default        : 'x,
+            CsrAddr::MISA   : misa,
+            CsrAddr::MIMPID : MACHINE_IMPLEMENTATION_ID,
+            CsrAddr::MHARTID: mhartid,
+            CsrAddr::MTVEC  : mtvec,
+            CsrAddr::MEPC   : mepc,
+            CsrAddr::MCAUSE : mcause,
+            CsrAddr::MTVAL  : mtval,
+            CsrAddr::LED    : led,
+            default         : 'x,
         };
         // write
         wmask = case csr_addr {
