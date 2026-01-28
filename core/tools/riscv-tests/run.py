@@ -139,32 +139,8 @@ def main() -> int:
 
     ap.add_argument("--membase", default="20000000")
     ap.add_argument("--entry", default="00000000")
-    ap.add_argument(
-        "--tohost",
-        default="80001000",
-        help="fallback TOHOST (used when --tohost_from_elf is off or extraction fails)",
-    )
-    ap.add_argument(
-        "--tohost_from_elf",
-        action="store_true",
-        help="extract tohost/fromhost from matching .elf per test",
-    )
-    ap.add_argument(
-        "--elfdir",
-        default=None,
-        help="directory containing .elf files (default: <dir>/elf)",
-    )
-    ap.add_argument(
-        "--nm", default="riscv64-unknown-elf-nm", help="nm command (full path OK)"
-    )
-    ap.add_argument(
-        "--tohost_mask",
-        default=None,
-        help="optional hex mask applied to extracted tohost (e.g. 1fffffff)",
-    )
-    ap.add_argument(
-        "--pass_fromhost", action="store_true", help="also pass FROMHOST=... when found"
-    )
+    ap.add_argument("--tohost_from_elf", action="store_true")
+    ap.add_argument("--elfdir", default=None, help="default: <dir>/elf")
     ap.add_argument(
         "--tb_timeout",
         default="5000000",
@@ -219,22 +195,18 @@ def main() -> int:
     for idx, f in enumerate(files):
         out_log = out_dir / f"{f.name}.log.txt"
         tohost_arg = args.tohost
-        fromhost_arg = None
         if args.tohost_from_elf:
             elfdir = Path(args.elfdir).resolve() if args.elfdir else (tests_dir / "elf")
             elf_path = elfdir / f"{f.stem}.elf"
-            th, fh = extract_sym_addr(elf_path, args.nm)
-            if th is not None:
-                if args.tohost_mask:
-                    th &= int(args.tohost_mask, 16)
-                tohost_arg = format(th, "x")
-            if args.pass_fromhost and fh is not None:
-                fromhost_arg = format(fh, "x")
+            if elf_path.is_file():
+                th = extract_sym_addr(elf_path, "tohost")
+                if th is not None:
+                    tohost_arg = format(th, "x")
 
-        plusargs = plusargs_base + [f"TOHOST={tohost_arg}"]
-        if fromhost_arg is not None:
-            plusargs += [f"FROMHOST={fromhost_arg}"]
-        plusargs += [f"HEX={str(to_posix_path(f))}"]
+        plusargs = plusargs_base + [
+            f"TOHOST={tohost_arg}",
+            f"HEX={str(to_posix_path(f))}",
+        ]
 
         # print command only for the first test unless verbose
         show_cmd = args.verbose and idx < 3
