@@ -17,6 +17,10 @@ add_files -fileset sources_1 [glob target/**/*.sv]
 add_files -fileset sources_1 target/top.v
 add_files -fileset sources_1 bootrom.hex
 
+# --- Add FIFO IP (XCI) ---------------------------------
+import_ip ip/fifo_8in8out_1024depth.xci
+update_ip_catalog
+
 # --- Boot ROM ------------------------------------------
 set bootrom_hex "bootrom.hex"
 add_files -fileset sources_1 -norecurse $bootrom_hex
