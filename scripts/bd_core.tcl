@@ -41,9 +41,12 @@ if {[llength [get_bd_cells -quiet smartconnect_core]] == 0} {
 
 # Interface connections
 
-connect_bd_net \
-  [get_bd_pins zynq_ultra_ps_e_0/pl_clk0] \
-  [get_bd_pins zynq_ultra_ps_e_0/saxihp1_fpd_aclk]
+# Connect PL clock to HP1 AXI clock (only if pin exists)
+if {[llength [get_bd_pins -quiet zynq_ultra_ps_e_0/saxihp1_fpd_aclk]] != 0} {
+    connect_bd_net -quiet       [get_bd_pins zynq_ultra_ps_e_0/pl_clk0]       [get_bd_pins zynq_ultra_ps_e_0/saxihp1_fpd_aclk]
+} else {
+    puts "WARNING: PS pin saxihp1_fpd_aclk not found (HP1 may be disabled in base BD)"
+}
 
 # connect_bd_net \
 #   [get_bd_pins rst_ps8_0_125M/peripheral_aresetn] \
@@ -129,22 +132,36 @@ connect_bd_net -quiet \
   $led_port
 
 # --------------------------------------------------------
-# 5) Tie-off UART_RX if core_0 has it (optional)
-#    (your current top.v drives UART_TX to 1'b1 anyway; RX is unused)
+# 5) UART wiring: core_0 UART_TX/UART_RX -> BD external ports
+#    We expose pins as HD_GPIO_1 (TX) and HD_GPIO_2 (RX) to match pynq_uart.xdc.
+#    If your wiring is swapped, swap the two connect_bd_net calls below.
 # --------------------------------------------------------
-if {[llength [get_bd_pins -quiet core_0/UART_RX]] != 0} {
-    if {[llength [get_bd_cells -quiet xlconstant_uart_rx]] == 0} {
-        set xlconstant_uart_rx [create_bd_cell -type ip -vlnv xilinx.com:ip:xlconstant:1.1 xlconstant_uart_rx]
-        set_property -dict [list CONFIG.CONST_VAL {1} CONFIG.CONST_WIDTH {1}] $xlconstant_uart_rx
+# TX: core_0/UART_TX -> HD_GPIO_1 (output)
+if {[llength [get_bd_pins -quiet core_0/UART_TX]] != 0} {
+    if {[llength [get_bd_ports -quiet HD_GPIO_1]] == 0} {
+        set hd_gpio_1 [create_bd_port -dir O -type data HD_GPIO_1]
     } else {
-        set xlconstant_uart_rx [get_bd_cells xlconstant_uart_rx]
+        set hd_gpio_1 [get_bd_ports HD_GPIO_1]
     }
-    connect_bd_net -quiet \
-      [get_bd_pins xlconstant_uart_rx/dout] \
-      [get_bd_pins core_0/UART_RX]
+    # Detach existing net if any
+    set tx_net [get_bd_nets -quiet -of_objects $hd_gpio_1]
+    if {$tx_net ne ""} { disconnect_bd_net -quiet $tx_net $hd_gpio_1 }
+    connect_bd_net -quiet [get_bd_pins core_0/UART_TX] $hd_gpio_1
+}
+
+# RX: HD_GPIO_2 (input) -> core_0/UART_RX
+if {[llength [get_bd_pins -quiet core_0/UART_RX]] != 0} {
+    if {[llength [get_bd_ports -quiet HD_GPIO_2]] == 0} {
+        set hd_gpio_2 [create_bd_port -dir I -type data HD_GPIO_2]
+    } else {
+        set hd_gpio_2 [get_bd_ports HD_GPIO_2]
+    }
+    # If RX is left unconnected externally, you can tie it high with xlconstant instead.
+    connect_bd_net -quiet $hd_gpio_2 [get_bd_pins core_0/UART_RX]
 }
 
 assign_bd_address
+
 
 # Done
 validate_bd_design
