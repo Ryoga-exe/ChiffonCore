@@ -1,7 +1,8 @@
 /// RISC-V execution environment interface
 package eei {
-    const XLEN: u32 = 64;
-    const ILEN: u32 = 32;
+    const XLEN  : u32 = 64;
+    const ILEN  : u32 = 32;
+    const IALIGN: u32 = 16;
 
     type UIntX  = logic       <XLEN>;
     type UInt32 = logic       <32>  ;
@@ -73,6 +74,13 @@ package eei {
         // User defined
         LED = 12'h800,
     }
+
+    // wmasks
+    const MTVEC_WMASK : UIntX = 'hffff_ffff_ffff_fffc;
+    const MEPC_WMASK  : UIntX = 'hffff_ffff_ffff_fffe;
+    const MCAUSE_WMASK: UIntX = 'hffff_ffff_ffff_ffff;
+    const MTVAL_WMASK : UIntX = 'hffff_ffff_ffff_ffff;
+    const LED_WMASK   : UIntX = 'hffff_ffff_ffff_ffff;
 
     enum CsrCause: UIntX {
         INSTRUCTION_ADDRESS_MISALIGNED = 0,
