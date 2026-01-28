@@ -31,7 +31,7 @@ module core_port #(
     inst rom_membus: membus_if::<ROM_DATA_WIDTH, ROM_ADDR_WIDTH>;
 
     // for instruction fetch
-    inst i_membus     : membus_if::<ILEN, XLEN>;
+    inst i_membus     : Membus;
     inst i_membus_core: core_inst_if;
     // for load/store
     inst d_membus     : Membus;
