@@ -31,13 +31,14 @@ module csrunit (
     var mode: PrivMode;
 
     // CSR
-    let mhartid: UIntX = 0;
-    var mstatus: UIntX;
-    let misa   : UIntX = {2'd2, 1'b0 repeat XLEN - 28, 26'b00000000000001000100000101}; // M, I, C, A
-    var mtvec  : UIntX;
-    var mepc   : UIntX;
-    var mcause : UIntX;
-    var mtval  : UIntX;
+    let mhartid: UIntX  = 0;
+    var mstatus: UIntX ;
+    let misa   : UIntX  = {2'd2, 1'b0 repeat XLEN - 28, 26'b00000000000001000100000101}; // M, I, C, A
+    var mtvec  : UIntX ;
+    var mepc   : UIntX ;
+    var mcause : UIntX ;
+    var mtval  : UIntX ;
+    var mcycle : UInt64;
 
     var wmask: UIntX; // write mask
     var wdata: UIntX; // write data
@@ -50,6 +51,7 @@ module csrunit (
             CsrAddr::MHARTID: mhartid,
             CsrAddr::MSTATUS: mstatus,
             CsrAddr::MTVEC  : mtvec,
+            CsrAddr::MCYCLE : mcycle,
             CsrAddr::MEPC   : mepc,
             CsrAddr::MCAUSE : mcause,
             CsrAddr::MTVAL  : mtval,
@@ -80,11 +82,13 @@ module csrunit (
             mode    = PrivMode::M;
             mstatus = 0;
             mtvec   = 0;
+            mcycle  = 0;
             mepc    = 0;
             mcause  = 0;
             mtval   = 0;
             led     = 0;
         } else {
+            mcycle += 1;
             if valid {
                 if raise_trap {
                     if raise_expt {
