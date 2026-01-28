@@ -115,7 +115,10 @@ module core_port #(
     );
 
     // UART MMIO (16550-like)
-    inst uart0: uart_mmio (
+    inst uart0: uart_mmio #(
+        CLOCK_FREQUENCY: 125_000_000,
+        BAUD_RATE      : 15200      ,
+    ) (
         clk                     ,
         rst                     ,
         rxd   : uart_rxd        ,
