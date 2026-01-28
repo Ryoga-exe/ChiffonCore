@@ -155,8 +155,6 @@ module top #(
 
   // NOTE: `core_port` is provided as Veryl wrapper (core_port.veryl).
   // It exposes the membus signals as plain ports (no SV interface on top-level).
-  // NOTE: `core_port` is provided as Veryl wrapper (core_port.veryl).
-  // It exposes the membus signals as plain ports (no SV interface on top-level).
   core_port u_core (
       .clk(ACLK),
       .rst(CORE_RST),
