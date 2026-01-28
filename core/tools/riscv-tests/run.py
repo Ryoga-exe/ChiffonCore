@@ -4,9 +4,26 @@ import re
 import subprocess
 from pathlib import Path
 
+from elftools.elf.elffile import ELFFile
+
 PASS_PAT = re.compile(r"riscv-tests success!", re.IGNORECASE)
 FAIL_PAT = re.compile(r"riscv-tests failed!", re.IGNORECASE)
 XERR_PAT = re.compile(r"\b(ERROR|FATAL)\b", re.IGNORECASE)
+
+
+def extract_sym_addr(elf_path: Path, sym_name: str) -> int | None:
+    from elftools.elf.elffile import ELFFile
+    from elftools.elf.sections import SymbolTableSection
+
+    with elf_path.open("rb") as f:
+        ef = ELFFile(f)
+        for sec in ef.iter_sections():
+            if not isinstance(sec, SymbolTableSection):
+                continue
+            for sym in sec.iter_symbols():
+                if sym.name == sym_name:
+                    return int(sym["st_value"])
+    return None
 
 
 def discover_snapshot(workdir: Path, preferred_prefix: str = "tb_riscv_tests") -> str:
@@ -123,6 +140,8 @@ def main() -> int:
     ap.add_argument("--membase", default="20000000")
     ap.add_argument("--entry", default="00000000")
     ap.add_argument("--tohost", default="80001000")
+    ap.add_argument("--tohost_from_elf", action="store_true")
+    ap.add_argument("--elfdir", default=None, help="default: <dir>/elf")
     ap.add_argument(
         "--tb_timeout",
         default="5000000",
@@ -169,7 +188,6 @@ def main() -> int:
     plusargs_base = [
         f"MEMBASE={args.membase}",
         f"ENTRY={args.entry}",
-        f"TOHOST={args.tohost}",
         f"TIMEOUT={args.tb_timeout}",
     ]
 
@@ -177,7 +195,19 @@ def main() -> int:
 
     for idx, f in enumerate(files):
         out_log = out_dir / f"{f.name}.log.txt"
-        plusargs = plusargs_base + [f"HEX={str(to_posix_path(f))}"]
+        tohost_arg = args.tohost
+        if args.tohost_from_elf:
+            elfdir = Path(args.elfdir).resolve() if args.elfdir else (tests_dir / "elf")
+            elf_path = elfdir / f"{f.stem}.elf"
+            if elf_path.is_file():
+                th = extract_sym_addr(elf_path, "tohost")
+                if th is not None:
+                    tohost_arg = format(th, "x")
+
+        plusargs = plusargs_base + [
+            f"TOHOST={tohost_arg}",
+            f"HEX={str(to_posix_path(f))}",
+        ]
 
         # print command only for the first test unless verbose
         show_cmd = args.verbose and idx < 3

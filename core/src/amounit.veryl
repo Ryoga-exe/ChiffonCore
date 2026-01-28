@@ -1,0 +1,275 @@
+import eei::*;
+
+module amounit (
+    clk   : input   clock              ,
+    rst   : input   reset              ,
+    slave : modport core_data_if::slave,
+    master: modport Membus::master     ,
+) {
+    enum State {
+        Init,
+        WaitReady,
+        WaitValid,
+        SCSuccess,
+        SCFail,
+        AMOLoadReady,
+        AMOLoadValid,
+        AMOStoreReady,
+        AMOStoreValid,
+    }
+    var state      : State;
+    inst slave_saved: core_data_if;
+
+    function reset_master () {
+        master.valid = 0;
+        master.addr  = 0;
+        master.wen   = 0;
+        master.wdata = 0;
+        master.wmask = 0;
+    }
+
+    // lr/sc
+    var is_addr_reserved: logic;
+    var reserved_addr   : Addr ;
+
+    // amo
+    var zaamo_fetched_data: UIntX;
+
+    // Assign request to master
+    function assign_master (
+        addr : input Addr                   ,
+        wen  : input logic                  ,
+        wdata: input UIntX                  ,
+        wmask: input logic<$size(UIntX) / 8>,
+    ) {
+        master.valid = 1;
+        master.addr  = addr;
+        master.wen   = wen;
+        master.wdata = wdata;
+        master.wmask = wmask;
+    }
+
+    // AMO ALU
+    function calc_amo::<W: u32> (
+        amoop: input AMOOp   ,
+        wdata: input logic<W>,
+        rdata: input logic<W>,
+    ) -> logic<W> {
+        let lts: logic = $signed(wdata) <: $signed(rdata);
+        let ltu: logic = wdata <: rdata;
+
+        return case amoop {
+            AMOOp::SWAP: wdata,
+            AMOOp::ADD : rdata + wdata,
+            AMOOp::XOR : rdata ^ wdata,
+            AMOOp::AND : rdata & wdata,
+            AMOOp::OR  : rdata | wdata,
+            AMOOp::MIN : if lts ? wdata : rdata,
+            AMOOp::MAX : if !lts ? wdata : rdata,
+            AMOOp::MINU: if ltu ? wdata : rdata,
+            AMOOp::MAXU: if !ltu ? wdata : rdata,
+            default    : 0,
+        };
+    }
+
+    // Generate wdata for Zaamo extension
+    function gen_amo_wdata (
+        req  : modport core_data_if::all_input,
+        rdata: input   UIntX                  ,
+    ) -> UIntX {
+        case req.funct3 {
+            3'b010: {
+                // word
+                let low    : logic  = req.addr[2] == 0;
+                let rdata32: UInt32 = if low ? rdata[31:0] : rdata[63:32];
+                let wdata32: UInt32 = if low ? req.wdata[31:0] : req.wdata[63:32];
+                let result : UInt32 = calc_amo::<32>(req.amoop, wdata32, rdata32);
+                return if low ? {rdata[63:32], result} : {result, rdata[31:0]};
+            }
+            3'b011 : return calc_amo::<64>(req.amoop, req.wdata, rdata); // double
+            default: return 0;
+        }
+    }
+
+    // Accept new request
+    function accept_request_comb () {
+        if slave.ready && slave.valid {
+            if slave.is_amo {
+                case slave.amoop {
+                    AMOOp::LR: assign_master(slave.addr, 0, 0, 0);
+                    AMOOp::SC: if is_addr_reserved && slave.addr == reserved_addr {
+                        assign_master(slave.addr, 1, slave.wdata, slave.wmask);
+                    }
+                    default: if slave.is_Zaamo() {
+                        assign_master(slave.addr, 0, 0, 0);
+                    }
+                }
+            } else {
+                assign_master(slave.addr, slave.wen, slave.wdata, slave.wmask);
+            }
+        }
+    }
+
+    // Assign result to slave
+    always_comb {
+        slave.ready  = 0;
+        slave.rvalid = 0;
+        slave.rdata  = 0;
+
+        case state {
+            State::Init: {
+                slave.ready = 1;
+            }
+            State::WaitValid: {
+                slave.ready  = master.rvalid;
+                slave.rvalid = master.rvalid;
+                slave.rdata  = master.rdata;
+            }
+            State::SCSuccess: {
+                slave.ready  = master.rvalid;
+                slave.rvalid = master.rvalid;
+                slave.rdata  = 0;
+            }
+            State::SCFail: {
+                slave.ready  = 1;
+                slave.rvalid = 1;
+                slave.rdata  = 1;
+            }
+            State::AMOStoreValid: {
+                slave.ready  = master.rvalid;
+                slave.rvalid = master.rvalid;
+                slave.rdata  = zaamo_fetched_data;
+            }
+            default: {}
+        }
+    }
+
+    // Assign request to master
+    always_comb {
+        reset_master();
+        case state {
+            State::Init     : accept_request_comb();
+            State::WaitReady: if slave_saved.is_amo {
+                case slave_saved.amoop {
+                    AMOOp::LR: assign_master(slave_saved.addr, 0, 0, 0);
+                    AMOOp::SC: assign_master(slave_saved.addr, 1, slave_saved.wdata, slave_saved.wmask);
+                    default  : {}
+                }
+            } else {
+                assign_master(slave_saved.addr, slave_saved.wen, slave_saved.wdata, slave_saved.wmask);
+            }
+            State::WaitValid                         : accept_request_comb();
+            State::SCSuccess, State::SCFail          : accept_request_comb();
+            State::AMOLoadReady                      : assign_master      (slave_saved.addr, 0, 0, 0);
+            State::AMOLoadValid, State::AMOStoreReady: {
+                let rdata        : UIntX = if state == State::AMOLoadValid ? master.rdata : zaamo_fetched_data;
+                let wdata        : UIntX = gen_amo_wdata(slave_saved, rdata);
+                assign_master(slave_saved.addr, 1, wdata, slave_saved.wmask);
+            }
+            State::AMOStoreValid: accept_request_comb();
+            default             : {}
+        }
+    }
+
+    // Accept new request
+    function accept_request_ff () {
+        slave_saved.valid = slave.ready && slave.valid;
+        if slave.ready && slave.valid {
+            slave_saved.addr   = slave.addr;
+            slave_saved.wen    = slave.wen;
+            slave_saved.wdata  = slave.wdata;
+            slave_saved.wmask  = slave.wmask;
+            slave_saved.is_amo = slave.is_amo;
+            slave_saved.amoop  = slave.amoop;
+            slave_saved.aq     = slave.aq;
+            slave_saved.rl     = slave.rl;
+            slave_saved.funct3 = slave.funct3;
+            if slave.is_amo {
+                case slave.amoop {
+                    AMOOp::LR: {
+                        // reserve address
+                        is_addr_reserved = 1;
+                        reserved_addr    = slave.addr;
+                        state            = if master.ready ? State::WaitValid : State::WaitReady;
+                    }
+                    AMOOp::SC: {
+                        // reset reserved
+                        let prev            : logic = is_addr_reserved;
+                        is_addr_reserved = 0;
+                        // check
+                        if prev && slave.addr == reserved_addr {
+                            state = if master.ready ? State::SCSuccess : State::WaitReady;
+                        } else {
+                            state = State::SCFail;
+                        }
+                    }
+                    default: if slave.is_Zaamo() {
+                        state = if master.ready ? State::AMOLoadValid : State::AMOLoadReady;
+                    }
+                }
+            } else {
+                state = if master.ready ? State::WaitValid : State::WaitReady;
+            }
+        } else {
+            state = State::Init;
+        }
+    }
+
+    function on_clock () {
+        case state {
+            State::Init     : accept_request_ff();
+            State::WaitReady: if master.ready {
+                if slave_saved.is_amo && slave_saved.amoop == AMOOp::SC {
+                    state = State::SCSuccess;
+                } else {
+                    state = State::WaitValid;
+                }
+            }
+            State::WaitValid: if master.rvalid {
+                accept_request_ff();
+            }
+            State::SCSuccess: if master.rvalid {
+                accept_request_ff();
+            }
+            State::SCFail      : accept_request_ff();
+            State::AMOLoadReady: if master.ready {
+                state = State::AMOLoadValid;
+            }
+            State::AMOLoadValid: if master.rvalid {
+                zaamo_fetched_data = master.rdata;
+                state              = if slave.ready ? State::AMOStoreValid : State::AMOStoreReady;
+            }
+            State::AMOStoreReady: if master.ready {
+                state = State::AMOStoreValid;
+            }
+            State::AMOStoreValid: if master.rvalid {
+                accept_request_ff();
+            }
+            default: {}
+        }
+    }
+
+    function on_reset () {
+        state              = State::Init;
+        slave_saved.addr   = 0;
+        slave_saved.wen    = 0;
+        slave_saved.wdata  = 0;
+        slave_saved.wmask  = 0;
+        slave_saved.is_amo = 0;
+        slave_saved.amoop  = 0 as AMOOp;
+        slave_saved.aq     = 0;
+        slave_saved.rl     = 0;
+        slave_saved.funct3 = 0;
+        is_addr_reserved   = 0;
+        reserved_addr      = 0;
+        zaamo_fetched_data = 0;
+    }
+
+    always_ff {
+        if_reset {
+            on_reset();
+        } else {
+            on_clock();
+        }
+    }
+}

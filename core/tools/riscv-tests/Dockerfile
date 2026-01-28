@@ -91,7 +91,8 @@ RUN make -C isa clean; \
     make -C isa -j"$(nproc)" XLEN=64 RISCV_PREFIX=riscv64-unknown-elf-; \
     find isa -maxdepth 1 -type f -name 'rv64ui-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ; \
     find isa -maxdepth 1 -type f -name 'rv64mi-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ; \
-    find isa -maxdepth 1 -type f -name 'rv64um-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ;
+    find isa -maxdepth 1 -type f -name 'rv64um-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ; \
+    find isa -maxdepth 1 -type f -name 'rv64ua-p-*' ! -name '*.dump' -exec cp -a {} "${RISCV_TESTS_ISA_DIR}/" \; ;
 
 WORKDIR /tmp
 RUN rm -rf /tmp/riscv-tests
