@@ -185,7 +185,7 @@ module uart_mmio #(
                         // RBR
                         resp_data = (rx_fifo_dout as UIntX) << sh;
                     } else if off == REG_LSR {
-                        resp_data = {0'b0, tx_empty, !tx_full, 0'b0, 0'b0, 0'b0, 0'b0, !rx_empty} as UIntX << sh;
+                        resp_data = {1'b0, tx_empty, !tx_full, 1'b0, 1'b0, 1'b0, 1'b0, !rx_empty} as UIntX << sh;
                     } else {
                         resp_data = 0;
                     }
