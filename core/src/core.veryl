@@ -7,6 +7,7 @@ module core (
     rst     : input   reset               ,
     i_membus: modport core_inst_if::master,
     d_membus: modport core_data_if::master,
+    aclint  : modport aclint_if::slave    ,
 
     led: output UIntX,
 ) {
@@ -366,6 +367,7 @@ module core (
         trap_vector: csru_trap_vector     ,
         trap_return: csru_trap_return     ,
         minstret                          ,
+        aclint                            ,
         led                               ,
     );
 
