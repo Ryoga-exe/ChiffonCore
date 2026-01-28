@@ -159,7 +159,7 @@ module amounit (
                 assign_master(slave_saved.addr, slave_saved.wen, slave_saved.wdata, slave_saved.wmask);
             }
             State::WaitValid                         : accept_request_comb();
-            State::SCFail, State::SCSuccess          : accept_request_comb();
+            State::SCSuccess, State::SCFail          : accept_request_comb();
             State::AMOLoadReady                      : assign_master      (slave_saved.addr, 0, 0, 0);
             State::AMOLoadValid, State::AMOStoreReady: {
                 let rdata        : UIntX = if state == State::AMOLoadValid ? master.rdata : zaamo_fetched_data;
