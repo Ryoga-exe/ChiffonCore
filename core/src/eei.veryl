@@ -78,7 +78,7 @@ package eei {
         MHARTID = 12'hf14,
         // Machine Trap Setup
         MSTATUS = 12'h300,
-        MISA = 12'h301,
+        MISA = 12'h301, // Machine ISA
         MEDELEG = 12'h302,
         MIDELEG = 12'h303,
         MIE = 12'h304,
