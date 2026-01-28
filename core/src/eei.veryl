@@ -150,12 +150,13 @@ package eei {
     const MACHINE_IMPLEMENTATION_ID: UIntX = 1;
 
     // wmasks
-    const MSTATUS_WMASK: UIntX = 'h0000_0000_0000_0000 as UIntX;
-    const MTVEC_WMASK  : UIntX = 'hffff_ffff_ffff_fffc;
-    const MEPC_WMASK   : UIntX = 'hffff_ffff_ffff_fffe;
-    const MCAUSE_WMASK : UIntX = 'hffff_ffff_ffff_ffff;
-    const MTVAL_WMASK  : UIntX = 'hffff_ffff_ffff_ffff;
-    const LED_WMASK    : UIntX = 'hffff_ffff_ffff_ffff;
+    const MSTATUS_WMASK : UIntX = 'h0000_0000_0000_0000 as UIntX;
+    const MTVEC_WMASK   : UIntX = 'hffff_ffff_ffff_fffc;
+    const MSCRATCH_WMASK: UIntX = 'hffff_ffff_ffff_ffff;
+    const MEPC_WMASK    : UIntX = 'hffff_ffff_ffff_fffe;
+    const MCAUSE_WMASK  : UIntX = 'hffff_ffff_ffff_ffff;
+    const MTVAL_WMASK   : UIntX = 'hffff_ffff_ffff_ffff;
+    const LED_WMASK     : UIntX = 'hffff_ffff_ffff_ffff;
 
     enum CsrCause: UIntX {
         INSTRUCTION_ADDRESS_MISALIGNED = 0,
