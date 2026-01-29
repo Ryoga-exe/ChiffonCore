@@ -6,6 +6,23 @@ module inst_fetcher (
     core_if: modport core_inst_if::slave,
     mem_if : modport Membus::master     ,
 ) {
+    // ------------------------------------------------------------
+    // 1-line I$ (line buffer)
+    //
+    // - Line size: 64B (= 8 x 64-bit words)
+    // - Purpose  : Avoid re-reading the same instruction words via AXI
+    //             on backward branches / tight loops.
+    // - Note     : To keep in-order delivery, cache-hit fetch is only
+    //             used when there is no outstanding memory request.
+    // ------------------------------------------------------------
+    const IC_LINE_BYTES: u32 = 64;
+    const IC_WORDS     : u32 = IC_LINE_BYTES / (MEMBUS_DATA_WIDTH / 8);
+
+    var ic_valid     : logic                              ;
+    var ic_base      : Addr                               ; // 64B aligned
+    var ic_word_valid: logic<IC_WORDS>                    ; // bitmap (IC_WORDS=8)
+    var ic_data      : logic<MEMBUS_DATA_WIDTH> [IC_WORDS];
+
     // FIFO
     struct fetch_fifo_type {
         addr: Addr                    ,
@@ -70,6 +87,14 @@ module inst_fetcher (
     var fetch_requested   : logic;
     var fetch_pc_requested: Addr ;
 
+    // I$ lookup for current fetch_pc
+    let ic_fetch_base: Addr     = {fetch_pc[msb:6], 6'b0};
+    let ic_fetch_idx : logic<3> = fetch_pc[5:3];
+    let ic_hit       : logic    = ic_valid && (ic_base == ic_fetch_base) && ic_word_valid[ic_fetch_idx];
+
+    // Cache-hit fetch is allowed only when no request is outstanding
+    let do_cache_push: logic = (!core_if.is_hazard) && (!fetch_requested) && fetch_fifo_wready && ic_hit;
+
     // Assign request to mem
     always_comb {
         mem_if.valid = 0;
@@ -79,7 +104,10 @@ module inst_fetcher (
         mem_if.wmask = 0;
 
         if !core_if.is_hazard {
-            mem_if.valid = fetch_fifo_wready;
+            // Issue memory read only on cache miss.
+            // When a request is outstanding, issue the next request only on the
+            // response cycle (mem_if.rvalid), just like the original logic.
+            mem_if.valid = fetch_fifo_wready && !ic_hit;
             if fetch_requested {
                 mem_if.valid = mem_if.valid && mem_if.rvalid;
             }
@@ -93,25 +121,69 @@ module inst_fetcher (
             fetch_pc           = INITIAL_PC;
             fetch_requested    = 0;
             fetch_pc_requested = 0;
+
+            ic_valid      = 0;
+            ic_base       = 0;
+            ic_word_valid = 0;
+
+            for i: u32 in 0..IC_WORDS {
+                ic_data[i] = 0;
+            }
         } else {
             if core_if.is_hazard {
                 fetch_pc           = {core_if.next_pc[XLEN - 1:3], 3'b0};
                 fetch_requested    = 0;
                 fetch_pc_requested = 0;
             } else {
-                if fetch_requested {
-                    if mem_if.rvalid {
-                        fetch_requested = mem_if.ready && mem_if.valid;
+                // Cache hit: push from ic_data and advance PC without touching mem_if.
+                if do_cache_push {
+                    fetch_pc += 8;
+                } else {
+                    if fetch_requested {
+                        if mem_if.rvalid {
+                            // Fill I$ with the response word (uses the *previous* fetch_pc_requested)
+                            let resp_base: Addr     = {fetch_pc_requested[msb:6], 6'b0};
+                            let resp_idx : logic<3> = fetch_pc_requested[5:3];
+                            if !ic_valid || ic_base != resp_base {
+                                ic_valid      = 1;
+                                ic_base       = resp_base;
+                                ic_word_valid = 0;
+                            }
+                            ic_data[resp_idx]       = mem_if.rdata;
+                            ic_word_valid[resp_idx] = 1;
+
+                            // Original pipelined request logic
+                            fetch_requested = mem_if.ready && mem_if.valid;
+                            if mem_if.ready && mem_if.valid {
+                                // Accept next request address
+                                // NOTE: capture req_addr explicitly to avoid any ambiguity
+                                // in procedural assignment ordering.
+                                let req_addr          : Addr = fetch_pc;
+                                let req_base          : Addr = {req_addr[msb:6], 6'b0};
+                                fetch_pc_requested =  req_addr;
+                                fetch_pc           += 8;
+
+                                // Allocate I$ line on new base (for the new request)
+                                if ic_base != req_base {
+                                    ic_valid      = 1;
+                                    ic_base       = req_base;
+                                    ic_word_valid = 0;
+                                }
+                            }
+                        }
+                    } else {
                         if mem_if.ready && mem_if.valid {
+                            fetch_requested    =  1;
                             fetch_pc_requested =  fetch_pc;
                             fetch_pc           += 8;
+
+                            // Allocate I$ line on miss if base differs
+                            if !ic_valid || ic_base != ic_fetch_base {
+                                ic_valid      = 1;
+                                ic_base       = ic_fetch_base;
+                                ic_word_valid = 0;
+                            }
                         }
-                    }
-                } else {
-                    if mem_if.ready && mem_if.valid {
-                        fetch_requested    =  1;
-                        fetch_pc_requested =  fetch_pc;
-                        fetch_pc           += 8;
                     }
                 }
             }
@@ -120,10 +192,15 @@ module inst_fetcher (
 
     // memory -> fetch_fifo
     always_comb {
-        fetch_fifo_flush      = core_if.is_hazard;
-        fetch_fifo_wvalid     = fetch_requested && mem_if.rvalid;
-        fetch_fifo_wdata.addr = fetch_pc_requested;
-        fetch_fifo_wdata.bits = mem_if.rdata;
+        fetch_fifo_flush  = core_if.is_hazard;
+        fetch_fifo_wvalid = do_cache_push || (fetch_requested && mem_if.rvalid);
+        if do_cache_push {
+            fetch_fifo_wdata.addr = fetch_pc;
+            fetch_fifo_wdata.bits = ic_data[ic_fetch_idx];
+        } else {
+            fetch_fifo_wdata.addr = fetch_pc_requested;
+            fetch_fifo_wdata.bits = mem_if.rdata;
+        }
     }
 
     // issue
