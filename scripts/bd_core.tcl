@@ -74,7 +74,7 @@ connect_bd_net -quiet \
   [get_bd_pins smartconnect_core/aresetn]
 
 # --------------------------------------------------------
-# 3) regbus wiring (bootctrl plane)
+# 3) regbus wiring (bootctrl plane via PS regbus_0)
 #    We map core RDATA into regbus_0/RDATA_OPT0 (0x1000..0x1FFF in your notebooks)
 # --------------------------------------------------------
 # Common control signals (broadcast)
@@ -98,6 +98,57 @@ if {$opt0_net ne ""} {
 connect_bd_net -quiet \
   [get_bd_pins core_0/RDATA] \
   [get_bd_pins regbus_0/RDATA_OPT0]
+
+# --------------------------------------------------------
+# 3b) Peripheral regbus wiring (CPU -> display_1/draw_0)
+#     - Disconnect PS regbus_0 from display/draw control pins
+#     - Route core_0/PERIPH_* to display_1 and draw_0
+#     - Route display_1/RDATA and draw_0/RDATA back into core_0 (DISP_RDATA/DRAW_RDATA)
+# --------------------------------------------------------
+set periph_pins_ok 1
+foreach sig {BYTEEN RDADDR RDEN WDATA WRADDR WREN} {
+    if {[llength [get_bd_pins -quiet core_0/PERIPH_${sig}]] == 0} {
+        puts "WARNING: core_0/PERIPH_${sig} not found. Did you rebuild top.v with PERIPH_* ports?"
+        set periph_pins_ok 0
+    }
+}
+if {$periph_pins_ok} {
+    foreach dev {display_1 draw_0} {
+        foreach sig {BYTEEN RDADDR RDEN WDATA WRADDR WREN} {
+            set dst [get_bd_pins -quiet ${dev}/${sig}]
+            if {[llength $dst] == 0} {
+                puts "WARNING: ${dev}/${sig} pin not found in base BD"
+                continue
+            }
+            # Detach existing driver net (from regbus_0)
+            set net [get_bd_nets -quiet -of_objects $dst]
+            if {$net ne ""} { disconnect_bd_net -quiet $net $dst }
+
+            connect_bd_net -quiet [get_bd_pins core_0/PERIPH_${sig}] $dst
+        }
+    }
+
+    # RDATA return path
+    # display_1/RDATA -> core_0/DISP_RDATA
+    set disp_rdata [get_bd_pins -quiet display_1/RDATA]
+    if {[llength $disp_rdata] != 0 && [llength [get_bd_pins -quiet core_0/DISP_RDATA]] != 0} {
+        set net [get_bd_nets -quiet -of_objects $disp_rdata]
+        if {$net ne ""} { disconnect_bd_net -quiet $net $disp_rdata }
+        connect_bd_net -quiet $disp_rdata [get_bd_pins core_0/DISP_RDATA]
+    } else {
+        puts "WARNING: display_1/RDATA or core_0/DISP_RDATA not found"
+    }
+
+    # draw_0/RDATA -> core_0/DRAW_RDATA
+    set draw_rdata [get_bd_pins -quiet draw_0/RDATA]
+    if {[llength $draw_rdata] != 0 && [llength [get_bd_pins -quiet core_0/DRAW_RDATA]] != 0} {
+        set net [get_bd_nets -quiet -of_objects $draw_rdata]
+        if {$net ne ""} { disconnect_bd_net -quiet $net $draw_rdata }
+        connect_bd_net -quiet $draw_rdata [get_bd_pins core_0/DRAW_RDATA]
+    } else {
+        puts "WARNING: draw_0/RDATA or core_0/DRAW_RDATA not found"
+    }
+}
 
 # --------------------------------------------------------
 # 4) LED wiring: core_0/LED[1:0] -> BD port LED[1:0]
