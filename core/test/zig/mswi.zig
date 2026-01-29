@@ -25,7 +25,7 @@ inline fn w_mstatus(x: u64) void {
 }
 
 export fn interrupt_handler() callconv(.{ .riscv64_interrupt = .{ .mode = .machine } }) void {
-    uart.putChar("OK\n");
+    uart.putString("OK\n");
 }
 
 pub export fn main() callconv(.c) noreturn {
@@ -35,7 +35,7 @@ pub export fn main() callconv(.c) noreturn {
 
     msip0.* = 1;
 
-    uart.putChar("NG\n"); // fail
+    uart.putString("NG\n"); // fail
 
     while (true) {}
 }
