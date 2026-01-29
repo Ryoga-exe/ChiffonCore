@@ -25,32 +25,63 @@ pub fn build(b: *std.Build) void {
         .preferred_optimize_mode = .ReleaseSmall,
     });
 
-    const hello = b.addExecutable(.{
-        .name = "hello.elf",
-        .root_module = b.addModule("hello", .{
-            .root_source_file = b.path("zig/hello.zig"),
+    addTest(b, .{
+        .name = "hello",
+        .root_source = "zig/hello.zig",
+        .entry_asm = "entry.S",
+        .linker = "link.ld",
+    }, target, optimize);
+
+    addTest(b, .{
+        .name = "mswi",
+        .root_source = "zig/mswi.zig",
+        .entry_asm = "entry.S",
+        .linker = "link.ld",
+    }, target, optimize);
+}
+
+const TestSpec = struct {
+    name: []const u8,
+    root_source: []const u8,
+    entry_asm: []const u8,
+    linker: []const u8,
+    bytes_per_line: usize = 4,
+};
+
+fn addTest(
+    b: *std.Build,
+    spec: TestSpec,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
+    // --- ELF ---
+    const exe = b.addExecutable(.{
+        .name = b.fmt("{s}.elf", .{spec.name}),
+        .root_module = b.addModule(spec.name, .{
+            .root_source_file = b.path(spec.root_source),
             .target = target,
             .optimize = optimize,
             .code_model = .medium,
         }),
     });
-    hello.entry = .{ .symbol_name = "_start" };
-    hello.setLinkerScript(b.path("link.ld"));
-    hello.addAssemblyFile(b.path("entry.S"));
-    b.installArtifact(hello);
+    exe.entry = .{ .symbol_name = "_start" };
+    exe.setLinkerScript(b.path(spec.linker));
+    exe.addAssemblyFile(b.path(spec.entry_asm));
+    b.installArtifact(exe);
 
-    const elf = hello.getEmittedBin();
-    const bin = elf2bin(b, elf, "hello.bin");
+    // --- ELF->BIN ---
+    const elf = exe.getEmittedBin();
+    const bin = elf2bin(b, elf, b.fmt("{s}.bin", .{spec.name}));
+
+    // --- BIN->HEX ---
     const hex = bin2hex(b, bin, .{
-        .bytes_per_line = 4,
-        .basename = "hello.bin.hex",
+        .bytes_per_line = spec.bytes_per_line,
+        .basename = b.fmt("{s}.bin.hex", .{spec.name}),
     });
 
-    b.getInstallStep().dependOn(&b.addInstallFile(bin, "hello.bin").step);
-    b.getInstallStep().dependOn(&b.addInstallFile(hex, "hello.bin.hex").step);
-
-    const hello_step = b.step("hello", "Build hello example");
-    hello_step.dependOn(&hello.step);
+    // install
+    b.getInstallStep().dependOn(&b.addInstallFile(bin, b.fmt("{s}.bin", .{spec.name})).step);
+    b.getInstallStep().dependOn(&b.addInstallFile(hex, b.fmt("{s}.bin.hex", .{spec.name})).step);
 }
 
 fn elf2bin(b: *std.Build, elf: std.Build.LazyPath, out_basename: []const u8) std.Build.LazyPath {
