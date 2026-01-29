@@ -30,14 +30,13 @@ module uart_mmio #(
         rst          ,
         din : rxd    ,
         dout: rx_word,
-        full: rx_full, // input (from RX FIFO full)
+        full: rx_full,
         we  : rx_we  ,
     );
 
-    // TX side is FIFO -> transmitter
     var tx_word : logic<8>;
-    var tx_empty: logic   ; // FIFO empty
-    var tx_re   : logic   ; // FIFO rd_en from transmitter
+    var tx_empty: logic   ;
+    var tx_re   : logic   ;
 
     inst u_tx: transmitter #(
         CLOCK_FREQUENCY: CLOCK_FREQUENCY,
@@ -47,19 +46,18 @@ module uart_mmio #(
         clk            ,
         rst            ,
         din  : tx_word ,
-        empty: tx_empty, // input (TX FIFO empty)
-        re   : tx_re   , // output (requests next byte)
+        empty: tx_empty,
+        re   : tx_re   ,
         dout : txd     ,
     );
 
     // ====================================================
-    // * FIFOs (Vivado FIFO IP)
+    // * FIFOs
     // ====================================================
 
     // RX FIFO: written by receiver, read by MMIO RBR
-    var rx_fifo_dout : logic<8>;
-    var rx_empty     : logic   ;
-    var rx_fifo_valid: logic   ; // IMPORTANT: tells when dout is valid (esp. non-FWFT modes)
+    var rx_fifo_dout: logic<8>;
+    var rx_empty    : logic   ;
 
     var rx_rd_en: logic;
 
@@ -73,7 +71,7 @@ module uart_mmio #(
         empty     : rx_empty              ,
         full      : rx_full               ,
         overflow  : _                     ,
-        valid     : rx_fifo_valid         ,
+        valid     : _                     ,
         underflow : _                     ,
         data_count: _                     ,
     );
@@ -105,14 +103,8 @@ module uart_mmio #(
     var addr_saved: Addr ;
     var wen_saved : logic;
 
-    // RBR read handling:
-    // - If FIFO is non-FWFT (dout becomes valid after rd_en), we must wait for rx_fifo_valid pulse.
-    // - If FIFO is FWFT (dout already valid when !empty), we should respond first then pop on response.
-    var rbr_wait_valid : logic; // non-FWFT path: we already issued rd_en, waiting for valid
-    var rbr_pop_on_resp: logic; // FWFT-ish path: respond with current dout, then pop on response
-
-    var resp_valid: logic;
-    var resp_data : UIntX;
+    var resp_valid    : logic;
+    var resp_data_calc: UIntX;
 
     // ready calc
     var ready_calc: logic;
@@ -120,12 +112,52 @@ module uart_mmio #(
     always_comb {
         membus.ready  = ready_calc;
         membus.rvalid = resp_valid;
-        membus.rdata  = resp_data;
+        membus.rdata  = resp_data_calc;
     }
 
-    // ----------------------------------------------------
-    // Helpers
-    // ----------------------------------------------------
+    // RX FIFO pop: assert on the same cycle the request is accepted
+    always_comb {
+        rx_rd_en = 0;
+        if !pending && membus.valid && ready_calc && !membus.wen {
+            let off: logic<12> = membus.addr[11:0];
+            if off == REG_RBR_THR && !rx_empty {
+                rx_rd_en = 1;
+            }
+        }
+    }
+
+    // Response data: compute combinationally from current FIFO outputs
+    always_comb {
+        resp_data_calc = 0;
+        if resp_valid && !wen_saved {
+            let off: logic<12> = addr_saved[11:0];
+            let bi : logic<3>  = addr_saved[2:0];
+            let sh : logic<6>  = {bi, 3'b000};
+
+            if off == REG_RBR_THR {
+                resp_data_calc = (rx_fifo_dout as UIntX) << sh;
+            } else if off == REG_LSR {
+                resp_data_calc = {1'b0, tx_empty, !tx_full, 1'b0, 1'b0, 1'b0, 1'b0, !rx_empty} as UIntX << sh;
+            }
+        }
+    }
+
+    // Combinational ready (stall only when busy or THR write while tx_full)
+    always_comb {
+        ready_calc = !pending;
+
+        if ready_calc && membus.valid {
+            let off: logic<12> = membus.addr[11:0];
+            let bi : logic<3>  = membus.addr[2:0];
+
+            if membus.wen && (off == REG_RBR_THR) {
+                if membus.wmask[bi] && tx_full {
+                    ready_calc = 0;
+                }
+            }
+        }
+    }
+
     function get_wbyte (
         wdata: input UIntX   ,
         bi   : input logic<3>,
@@ -143,188 +175,49 @@ module uart_mmio #(
         }
     }
 
-    // ----------------------------------------------------
-    // Combinational READY
-    // - Stall if busy
-    // - Stall THR write when TX FIFO full
-    // - (optional but recommended) Stall RBR read when RX empty
-    // ----------------------------------------------------
-    always_comb {
-        ready_calc = !pending;
-
-        if ready_calc && membus.valid {
-            let off: logic<12> = membus.addr[11:0];
-            let bi : logic<3>  = membus.addr[2:0];
-
-            // THR write: if the selected byte lane is written and FIFO is full, stall
-            if membus.wen && (off == REG_RBR_THR) {
-                if membus.wmask[bi] && tx_full {
-                    ready_calc = 0;
-                }
-            }
-
-            // RBR read: if RX empty, stall (blocking semantics; avoids reading stale)
-            if !membus.wen && (off == REG_RBR_THR) {
-                if rx_empty {
-                    ready_calc = 0;
-                }
-            }
-        }
-    }
-
-    // ----------------------------------------------------
-    // RX FIFO rd_en generation
-    // 1) non-FWFT path: issue rd_en on accept (so data appears later, wait for valid)
-    // 2) FWFT-ish path: pop on response cycle (so we return current dout, then consume)
-    // ----------------------------------------------------
-    always_comb {
-        rx_rd_en = 0;
-
-        // accept fire (combinational)
-        let accept_fire: logic = !pending && membus.valid && ready_calc;
-
-        if accept_fire && !membus.wen {
-            let off_in: logic<12> = membus.addr[11:0];
-
-            if off_in == REG_RBR_THR {
-                // If valid is already high while !empty, treat as FWFT-ish:
-                // do NOT pop now; pop on response.
-                // Otherwise, pop now and wait for valid.
-                if !rx_empty && !rx_fifo_valid {
-                    rx_rd_en = 1; // non-FWFT path: trigger read now
-                }
-            }
-        }
-
-        // pop-on-response (FWFT-ish)
-        if pending && !wen_saved {
-            let off_sv: logic<12> = addr_saved[11:0];
-            if off_sv == REG_RBR_THR && rbr_pop_on_resp {
-                // pop happens in the response cycle (one-shot)
-                rx_rd_en = 1;
-            }
-        }
-    }
-
-    // ----------------------------------------------------
-    // Main FF
-    // ----------------------------------------------------
+    // Main
     always_ff {
         if_reset {
             pending    = 0;
             addr_saved = 0;
             wen_saved  = 0;
 
-            rbr_wait_valid  = 0;
-            rbr_pop_on_resp = 0;
-
             resp_valid = 0;
-            resp_data  = 0;
 
             tx_fifo_we  = 0;
             tx_fifo_din = 0;
         } else {
-            // defaults
+            // default values
             resp_valid = 0;
-            resp_data  = 0;
 
             tx_fifo_we  = 0;
             tx_fifo_din = 0;
 
-            // -------------------------
-            // Response phase (may take multiple cycles for RBR)
-            // -------------------------
+            // Response
             if pending {
-                let off: logic<12> = addr_saved[11:0];
-                let bi : logic<3>  = addr_saved[2:0];
-                let sh : logic<6>  = {bi, 3'b000};
-
-                if wen_saved {
-                    // writes: acknowledge
-                    resp_valid = 1;
-                    resp_data  = 0;
-
-                    pending = 0;
-                } else {
-                    // reads
-                    if off == REG_LSR {
-                        // [7]=0, [6]=TX empty, [5]=!TX full, [0]=!RX empty
-                        resp_valid = 1;
-                        resp_data  = {1'b0, tx_empty, !tx_full, 1'b0, 1'b0, 1'b0, 1'b0, !rx_empty} as UIntX << sh;
-
-                        pending = 0;
-                    } else if off == REG_RBR_THR {
-                        // RBR read:
-                        // - FWFT-ish: respond immediately with current dout, and pop is done by rx_rd_en in this cycle
-                        // - non-FWFT: wait until rx_fifo_valid asserts, then respond with dout
-                        if rbr_pop_on_resp {
-                            resp_valid = 1;
-                            resp_data  = (rx_fifo_dout as UIntX) << sh;
-
-                            pending         = 0;
-                            rbr_pop_on_resp = 0;
-                        } else if rbr_wait_valid {
-                            if rx_fifo_valid {
-                                resp_valid = 1;
-                                resp_data  = (rx_fifo_dout as UIntX) << sh;
-
-                                pending        = 0;
-                                rbr_wait_valid = 0;
-                            } else {
-                                // keep waiting
-                            }
-                        } else {
-                            // shouldn't happen (because we stall on rx_empty),
-                            // but keep it safe
-                            resp_valid = 1;
-                            resp_data  = 0;
-                            pending    = 0;
-                        }
-                    } else {
-                        // unknown read -> return 0
-                        resp_valid = 1;
-                        resp_data  = 0;
-                        pending    = 0;
-                    }
-                }
+                resp_valid = 1;
+                pending    = 0;
             }
 
-            // -------------------------
-            // Accept phase
-            // -------------------------
+            // Accept
             if !pending && membus.valid && membus.ready {
-                let off_in: logic<12> = membus.addr[11:0];
-                let bi_in : logic<3>  = membus.addr[2:0];
+                let off: logic<12> = membus.addr[11:0];
+                let bi : logic<3>  = membus.addr[2:0];
 
                 pending    = 1;
                 addr_saved = membus.addr;
                 wen_saved  = membus.wen;
 
-                // clear RBR flags by default for this request
-                rbr_wait_valid  = 0;
-                rbr_pop_on_resp = 0;
-
                 if membus.wen {
                     // THR write
-                    if off_in == REG_RBR_THR {
-                        if membus.wmask[bi_in] && !tx_full {
+                    if off == REG_RBR_THR {
+                        if membus.wmask[bi] && !tx_full {
                             tx_fifo_we  = 1;
-                            tx_fifo_din = get_wbyte(membus.wdata, bi_in);
+                            tx_fifo_din = get_wbyte(membus.wdata, bi);
                         }
                     }
                 } else {
-                    // RBR read: decide mode
-                    if off_in == REG_RBR_THR {
-                        // We stalled on rx_empty in ready_calc, so rx_empty should be 0 here.
-                        // Heuristic:
-                        // - if rx_fifo_valid is already 1 => likely FWFT-ish (dout already valid), so pop on response
-                        // - else => non-FWFT, we already issued rd_en on accept, now wait for valid
-                        if rx_fifo_valid {
-                            rbr_pop_on_resp = 1;
-                        } else {
-                            rbr_wait_valid = 1;
-                        }
-                    }
+                    // RBR pop is handled by rx_rd_en (always_comb)
                 }
             }
         }
