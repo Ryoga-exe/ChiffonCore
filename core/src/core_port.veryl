@@ -21,6 +21,15 @@ module core_port #(
     uart_rxd: input  logic,
     uart_txd: output logic,
 
+    // CPU -> peripheral regbus (display/draw)
+    periph_wraddr: output logic<16>,
+    periph_byteen: output logic<4> ,
+    periph_wren  : output logic    ,
+    periph_wdata : output logic<32>,
+    periph_rdaddr: output logic<16>,
+    periph_rden  : output logic    ,
+    periph_rdata : input  logic<32>,
+
     led: output UIntX,
 ) {
     inst mmio_membus       : Membus;
@@ -28,6 +37,7 @@ module core_port #(
     inst mmio_rom_membus   : Membus;
     inst mmio_aclint_membus: Membus;
     inst mmio_uart_membus  : Membus;
+    inst mmio_regbus_membus: Membus;
 
     inst rom_membus     : membus_if::<ROM_DATA_WIDTH, ROM_ADDR_WIDTH>;
     inst aclint_core_bus: aclint_if;
@@ -137,6 +147,20 @@ module core_port #(
         membus: mmio_uart_membus,
     );
 
+    // REGBUS MMIO bridge (CPU MMIO -> regbus signals)
+    inst regbus0: regbus_mmio (
+        clk                       ,
+        rst                       ,
+        membus: mmio_regbus_membus,
+        WRADDR: periph_wraddr     ,
+        BYTEEN: periph_byteen     ,
+        WREN  : periph_wren       ,
+        WDATA : periph_wdata      ,
+        RDADDR: periph_rdaddr     ,
+        RDEN  : periph_rden       ,
+        RDATA : periph_rdata      ,
+    );
+
     inst mmioc: mmio_controller (
         clk                              ,
         rst                              ,
@@ -145,6 +169,7 @@ module core_port #(
         rom_membus   : mmio_rom_membus   ,
         aclint_membus: mmio_aclint_membus,
         uart_membus  : mmio_uart_membus  ,
+        regbus_membus: mmio_regbus_membus,
     );
 
     inst amou: amounit (
