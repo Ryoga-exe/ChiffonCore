@@ -108,6 +108,7 @@ module csrunit (
         wmask = case csr_addr {
             CsrAddr::MSTATUS : MSTATUS_WMASK,
             CsrAddr::MTVEC   : MTVEC_WMASK,
+            CsrAddr::MIE     : MIE_WMASK,
             CsrAddr::MSCRATCH: MSCRATCH_WMASK,
             CsrAddr::MEPC    : MEPC_WMASK,
             CsrAddr::MCAUSE  : MCAUSE_WMASK,
