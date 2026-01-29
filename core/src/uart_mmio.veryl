@@ -59,13 +59,14 @@ module uart_mmio #(
     var rx_fifo_dout: logic<8>;
     var rx_empty    : logic   ;
 
-    var rx_rd_en: logic;
+    // pulsed for 1 cycle when we accept RBR read and data exists
+    var rx_re_pulse: logic;
 
     inst u_rx_fifo: $sv::fifo_8in8out_1024depth (
         clk                               ,
         rst       : rst as reset_sync_high,
         din       : rx_word               ,
-        rd_en     : rx_rd_en              ,
+        rd_en     : rx_re_pulse           ,
         wr_en     : rx_we                 ,
         dout      : rx_fifo_dout          ,
         empty     : rx_empty              ,
@@ -103,8 +104,9 @@ module uart_mmio #(
     var addr_saved: Addr ;
     var wen_saved : logic;
 
-    var resp_valid    : logic;
-    var resp_data_calc: UIntX;
+    // response regs
+    var resp_valid: logic;
+    var resp_data : UIntX;
 
     // ready calc
     var ready_calc: logic;
@@ -112,34 +114,7 @@ module uart_mmio #(
     always_comb {
         membus.ready  = ready_calc;
         membus.rvalid = resp_valid;
-        membus.rdata  = resp_data_calc;
-    }
-
-    // RX FIFO pop: assert on the same cycle the request is accepted
-    always_comb {
-        rx_rd_en = 0;
-        if !pending && membus.valid && ready_calc && !membus.wen {
-            let off: logic<12> = membus.addr[11:0];
-            if off == REG_RBR_THR && !rx_empty {
-                rx_rd_en = 1;
-            }
-        }
-    }
-
-    // Response data: compute combinationally from current FIFO outputs
-    always_comb {
-        resp_data_calc = 0;
-        if pending && !wen_saved {
-            let off: logic<12> = addr_saved[11:0];
-            let bi : logic<3>  = addr_saved[2:0];
-            let sh : logic<6>  = {bi, 3'b000};
-
-            if off == REG_RBR_THR {
-                resp_data_calc = (rx_fifo_dout as UIntX) << sh;
-            } else if off == REG_LSR {
-                resp_data_calc = {1'b0, tx_empty, !tx_full, 1'b0, 1'b0, 1'b0, 1'b0, !rx_empty} as UIntX << sh;
-            }
-        }
+        membus.rdata  = resp_data;
     }
 
     // Combinational ready (stall only when busy or THR write while tx_full)
@@ -183,20 +158,40 @@ module uart_mmio #(
             wen_saved  = 0;
 
             resp_valid = 0;
+            resp_data  = 0;
 
+            rx_re_pulse = 0;
             tx_fifo_we  = 0;
             tx_fifo_din = 0;
         } else {
             // default values
             resp_valid = 0;
+            resp_data  = 0;
 
+            rx_re_pulse = 0;
             tx_fifo_we  = 0;
             tx_fifo_din = 0;
 
             // Response
             if pending {
+                let off: logic<12> = addr_saved[11:0];
+                let bi : logic<3>  = addr_saved[2:0];
+                let sh : logic<6>  = {bi, 3'b000}; // bi * 8
+
                 resp_valid = 1;
-                pending    = 0;
+
+                if !wen_saved {
+                    if off == REG_RBR_THR {
+                        // RBR
+                        resp_data = (rx_fifo_dout as UIntX) << sh;
+                    } else if off == REG_LSR {
+                        resp_data = {1'b0, tx_empty, !tx_full, 1'b0, 1'b0, 1'b0, 1'b0, !rx_empty} as UIntX << sh;
+                    } else {
+                        resp_data = 0;
+                    }
+                }
+
+                pending = 0;
             }
 
             // Accept
@@ -217,7 +212,12 @@ module uart_mmio #(
                         }
                     }
                 } else {
-                    // RBR pop is handled by rx_rd_en (always_comb)
+                    // RBR read pop RX FIFO
+                    if off == REG_RBR_THR {
+                        if !rx_empty {
+                            rx_re_pulse = 1;
+                        }
+                    }
                 }
             }
         }
