@@ -38,6 +38,13 @@ pub fn build(b: *std.Build) void {
         .entry_asm = "entry.S",
         .linker = "link.ld",
     }, target, optimize);
+
+    addTest(b, .{
+        .name = "mtime",
+        .root_source = "zig/mtime.zig",
+        .entry_asm = "entry.S",
+        .linker = "link.ld",
+    }, target, optimize);
 }
 
 const TestSpec = struct {
