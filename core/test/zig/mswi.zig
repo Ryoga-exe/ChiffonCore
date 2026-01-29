@@ -24,7 +24,7 @@ inline fn w_mstatus(x: u64) void {
         : .{ .memory = true });
 }
 
-export fn interrupt_handler() callconv(.riscv64_interrupt) void {
+export fn interrupt_handler() callconv(.{ .riscv64_interrupt = .{ .mode = .machine } }) void {
     uart.putChar('1');
 }
 
