@@ -69,7 +69,8 @@ module csrunit (
     // Interrupt
     let raise_interrupt : logic = valid && can_intr && mstatus_mie && (mip & mie) != 0;
     let interrupt_cause : UIntX = CsrCause::MACHINE_SOFTWARE_INTERRUPT;
-    let interrupt_vector: Addr  = mtvec;
+    let interrupt_vector: Addr  = if mtvec[0] == 0 ? {mtvec[msb:2], 2'b0} : // Direct
+     {mtvec[msb:2] + interrupt_cause[msb - 2:0], 2'b0}; // Vectored
 
     var wmask: UIntX; // write mask
     var wdata: UIntX; // write data
@@ -174,6 +175,7 @@ module csrunit (
         expt_cause == CsrCause::ILLEGAL_INSTRUCTION: {1'b0 repeat XLEN - $bits(Inst), inst_bits},
         default                                    : 0
     };
+    let expt_vector: Addr = {mtvec[msb:2], 2'b0};
 
     // Trap Return
     assign trap_return = valid && is_mret && !raise_expt && !raise_interrupt;
@@ -186,7 +188,7 @@ module csrunit (
         default        : 0,
     };
     assign trap_vector = switch {
-        raise_expt     : mtvec,
+        raise_expt     : expt_vector,
         raise_interrupt: interrupt_vector,
         trap_return    : mepc,
         default        : 0,
