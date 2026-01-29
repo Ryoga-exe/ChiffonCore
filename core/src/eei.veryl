@@ -39,6 +39,10 @@ package eei {
     const MMAP_UART_BEGIN: Addr = 'h1000_0000 as Addr;
     const MMAP_UART_END  : Addr = MMAP_UART_BEGIN + 'h3ff as Addr;
 
+    // REGBUS window (CPU -> peripherals)
+    const MMAP_REGBUS_BEGIN: Addr = 'h1001_0000 as Addr;
+    const MMAP_REGBUS_END  : Addr = MMAP_REGBUS_BEGIN + 'hffff as Addr;
+
     // pc on reset
     const INITIAL_PC: Addr = MMAP_ROM_BEGIN;
 

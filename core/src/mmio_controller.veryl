@@ -8,6 +8,7 @@ module mmio_controller (
     rom_membus   : modport Membus::master,
     aclint_membus: modport Membus::master,
     uart_membus  : modport Membus::master,
+    regbus_membus: modport Membus::master,
 ) {
 
     enum Device {
@@ -16,6 +17,7 @@ module mmio_controller (
         ROM,
         ACLINT,
         UART,
+        REGBUS,
     }
 
     inst req_saved: Membus;
@@ -40,6 +42,7 @@ module mmio_controller (
         reset_membus_master(rom_membus);
         reset_membus_master(aclint_membus);
         reset_membus_master(uart_membus);
+        reset_membus_master(regbus_membus);
     }
 
     // Get device from address
@@ -54,6 +57,9 @@ module mmio_controller (
         }
         if MMAP_UART_BEGIN <= addr && addr <= MMAP_UART_END {
             return Device::UART;
+        }
+        if MMAP_REGBUS_BEGIN <= addr && addr <= MMAP_REGBUS_END {
+            return Device::REGBUS;
         }
         if addr >= MMAP_RAM_BEGIN {
             return Device::RAM;
@@ -82,6 +88,10 @@ module mmio_controller (
                 uart_membus      <> req;
                 uart_membus.addr -= MMAP_UART_BEGIN;
             }
+            Device::REGBUS: {
+                regbus_membus      <> req;
+                regbus_membus.addr -= MMAP_REGBUS_BEGIN;
+            }
             default: {}
         }
     }
@@ -98,6 +108,7 @@ module mmio_controller (
             Device::ROM   : req <> rom_membus;
             Device::ACLINT: req <> aclint_membus;
             Device::UART  : req <> uart_membus;
+            Device::REGBUS: req <> regbus_membus;
             default       : {}
         }
     }
@@ -111,6 +122,7 @@ module mmio_controller (
             Device::ROM   : return rom_membus.ready;
             Device::ACLINT: return aclint_membus.ready;
             Device::UART  : return uart_membus.ready;
+            Device::REGBUS: return regbus_membus.ready;
             default       : {}
         }
     }
@@ -124,6 +136,7 @@ module mmio_controller (
             Device::ROM   : return rom_membus.rvalid;
             Device::ACLINT: return aclint_membus.rvalid;
             Device::UART  : return uart_membus.rvalid;
+            Device::REGBUS: return regbus_membus.rvalid;
             default       : {}
         }
         return 1;

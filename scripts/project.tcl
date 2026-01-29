@@ -54,26 +54,15 @@ set_property file_type {Memory Initialization Files} [get_files -of_objects [get
 update_compile_order -fileset sources_1
 
 # --- Create Block Design (base: bd_base.tcl, then patch in core) ---
-set base_design_tcl [file join $scripts_dir "bd_base.tcl"]
-set patch_design_tcl [file join $scripts_dir "bd_core.tcl"]
+set core_design_tcl [file join $scripts_dir "bd_core.tcl"]
 
-if {![file exists $base_design_tcl]} {
-    puts "ERROR: can't find base BD script: $base_design_tcl"
-    puts "HINT: copy/symlink your existing pynq_draw.tcl next to this script, or edit base_design_tcl."
-    exit 1
-}
-if {![file exists $patch_design_tcl]} {
-    puts "ERROR: can't find core BD patch script: $patch_design_tcl"
+if {![file exists $core_design_tcl]} {
+    puts "ERROR: can't find core BD patch script: $core_design_tcl"
     exit 1
 }
 
-# Build base BD (display+draw+regbus+PS etc)
-puts "INFO: source $base_design_tcl"
-source $base_design_tcl
-
-# Patch BD: add core module + interconnect + wiring
-puts "INFO: source $patch_design_tcl"
-source $patch_design_tcl
+puts "INFO: source $core_design_tcl"
+source $core_design_tcl
 
 # --- Generate wrapper / targets -------------------------
 validate_bd_design
