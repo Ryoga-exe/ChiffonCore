@@ -1,0 +1,91 @@
+import eei::*;
+
+/// Bridge: CPU Membus (64-bit) <-> regbus (32-bit, 16-bit addr)
+module regbus_mmio (
+    clk   : input   clock        ,
+    rst   : input   reset        ,
+    membus: modport Membus::slave,
+
+    // regbus signals (to display/draw)
+    WRADDR: output logic<16>,
+    BYTEEN: output logic<4> ,
+    WREN  : output logic    ,
+    WDATA : output logic<32>,
+    RDADDR: output logic<16>,
+    RDEN  : output logic    ,
+    RDATA : input  logic<32>,
+) {
+    var pending   : logic;
+    var resp_valid: logic;
+    var resp_data : UIntX;
+
+    // latched info for response
+    var lat_shift     : logic<6> ;
+    var lat_read_rdata: logic<32>;
+
+    // Accept handshake (single outstanding)
+    let accept: logic = membus.valid & membus.ready;
+    let hiword: logic = membus.addr[2];
+
+    // Convert 64-bit lane -> 32-bit reg write
+    let wdata32: logic<32> = if hiword ? membus.wdata[63:32] : membus.wdata[31:0];
+    let byteen : logic<4>  = if hiword ? membus.wmask[7:4] : membus.wmask[3:0];
+
+    // regbus drive (one-cycle pulse on accept)
+    always_comb {
+        WRADDR = membus.addr[15:0];
+        RDADDR = membus.addr[15:0];
+
+        WDATA  = wdata32;
+        BYTEEN = byteen;
+
+        WREN = accept & membus.wen;
+        RDEN = accept & !membus.wen;
+    }
+
+    // membus response/ready
+    always_comb {
+        membus.ready  = !pending;
+        membus.rvalid = resp_valid;
+        membus.rdata  = resp_data;
+    }
+
+    function on_reset () {
+        pending        = 0;
+        resp_valid     = 0;
+        resp_data      = 0;
+        lat_shift      = 0;
+        lat_read_rdata = 0;
+    }
+
+    function on_clock () {
+        // default
+        resp_valid = 0;
+
+        if accept {
+            // capture request, produce response next cycle
+            pending   = 1;
+            lat_shift = if hiword ? 6'd32 : 6'd0;
+
+            // capture read data at this clock edge (regbus RDATA is combinational under RDEN/RDADDR)
+            if !membus.wen {
+                lat_read_rdata = RDATA;
+            } else {
+                lat_read_rdata = 0;
+            }
+        } else if pending {
+            // respond (one-cycle)
+            resp_valid = 1;
+            resp_data  = (lat_read_rdata as UIntX) << lat_shift;
+            pending    = 0;
+        }
+    }
+
+    always_ff {
+        if_reset {
+            on_reset();
+        } else {
+            on_clock();
+        }
+    }
+}
