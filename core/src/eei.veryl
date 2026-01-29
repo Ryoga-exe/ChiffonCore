@@ -152,6 +152,11 @@ package eei {
         // * Custom
         // ====================================================
         LED = 12'h800,
+
+        // Unprivileged Counter/Timers
+        CYCLE = 12'hC00,
+        TIME = 12'hC01,
+        INSTRET = 12'hC02,
     }
 
     // Machine Implementation ID
