@@ -91,6 +91,16 @@ module top #(
     input  wire          RDEN,
     output wire [32-1:0] RDATA,
 
+    // CPU -> peripheral regbus (display/draw/etc.)
+    output wire [16-1:0] PERIPH_WRADDR,
+    output wire [ 4-1:0] PERIPH_BYTEEN,
+    output wire          PERIPH_WREN,
+    output wire [32-1:0] PERIPH_WDATA,
+    output wire [16-1:0] PERIPH_RDADDR,
+    output wire          PERIPH_RDEN,
+    input  wire [32-1:0] DISP_RDATA,
+    input  wire [32-1:0] DRAW_RDATA,
+
     output wire [31:0] DEBUG  // for debugging
 );
 
@@ -135,6 +145,10 @@ module top #(
   // Later: OR / mux with draw/display regctrl RDATA.
   assign RDATA = boot_rdata;
 
+  // Peripheral regbus read-data (OR; peripheral blocks return 0 for unmapped addrs)
+  wire [31:0] periph_rdata;
+  assign periph_rdata = DISP_RDATA | DRAW_RDATA;
+
   //-------------------------------------------------------------------------
   // CPU core (wrapped with plain membus wires)
   //-------------------------------------------------------------------------
@@ -149,7 +163,6 @@ module top #(
   wire [ 7:0] ram_wmask;
   wire        ram_rvalid;
   wire [63:0] ram_rdata;
-
 
   wire [63:0] csr_led;
 
@@ -170,6 +183,14 @@ module top #(
 
       .uart_rxd(UART_RX),
       .uart_txd(UART_TX),
+
+      .periph_wraddr(PERIPH_WRADDR),
+      .periph_byteen(PERIPH_BYTEEN),
+      .periph_wren  (PERIPH_WREN),
+      .periph_wdata (PERIPH_WDATA),
+      .periph_rdaddr(PERIPH_RDADDR),
+      .periph_rden  (PERIPH_RDEN),
+      .periph_rdata (periph_rdata),
 
       .led(csr_led)
   );
