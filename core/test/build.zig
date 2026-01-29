@@ -5,9 +5,9 @@ pub fn build(b: *std.Build) void {
     const enabled_features = std.Target.riscv.featureSet(&[_]Feature{
         .a,
         .m,
-        .c,
     });
     const disabled_features = std.Target.riscv.featureSet(&[_]Feature{
+        .c,
         .d,
         .e,
         .f,
