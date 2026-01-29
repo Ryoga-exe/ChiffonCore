@@ -27,6 +27,14 @@ package eei {
     const MMAP_ROM_BEGIN: Addr = 'h1000 as Addr;
     const MMAP_ROM_END  : Addr = MMAP_ROM_BEGIN + 'h3ff as Addr;
 
+    // ACLINT
+    const MMAP_ACLINT_BEGIN   : Addr = 'h200_0000 as Addr;
+    const MMAP_ACLINT_MSIP    : Addr = 0;
+    const MMAP_ACLINT_MTIMECMP: Addr = 'h4000 as Addr;
+    const MMAP_ACLINT_MTIME   : Addr = 'h7ff8 as Addr;
+    const MMAP_ACLINT_SETSSIP : Addr = 'h8000 as Addr;
+    const MMAP_ACLINT_END     : Addr = MMAP_ACLINT_BEGIN + 'hbfff as Addr;
+
     // UART (16550)
     const MMAP_UART_BEGIN: Addr = 'h1000_0000 as Addr;
     const MMAP_UART_END  : Addr = MMAP_UART_BEGIN + 'h3ff as Addr;
@@ -65,22 +73,104 @@ package eei {
         MAXU = 5'b11100,
     }
 
-    // CSR Address
-    enum CsrAddr: logic<12> {
-        MTVEC = 12'h305,
-        MEPC = 12'h341,
-        MCAUSE = 12'h342,
-        MTVAL = 12'h343,
-        // User defined
-        LED = 12'h800,
+    enum PrivMode: logic<2> {
+        M = 2'b11,
+        S = 2'b01,
+        U = 2'b00,
     }
 
+    /// CSR Address
+    enum CsrAddr: logic<12> {
+        // ====================================================
+        // * Machine Information Registers
+        // ====================================================
+        // MVENDORID = 12'hf11, /// Vendor ID
+        // MARCHID = 12'hf12, /// Architecture ID
+        MIMPID = 12'hf13, /// Implementation ID
+        MHARTID = 12'hf14, /// Hardware thread ID
+        // MCONFIGPTR = 0xf15, /// Pointer to configuration data structure
+
+        // ====================================================
+        // * Machine Trap Setup
+        // ====================================================
+        MSTATUS = 12'h300, /// Machine status register
+        MISA = 12'h301, /// ISA and extensions
+        MEDELEG = 12'h302, /// Machine exception delegation register
+        MIDELEG = 12'h303, /// Machine interrupt delegation register
+        MIE = 12'h304, /// Machine interrupt-enable register
+        MTVEC = 12'h305, /// Machine trap-handler base address
+        MCOUNTEREN = 12'h306, // Machine counter enable
+        // MSTATUSH = 12'h310, /// Additional machine status register, RV32 only
+        // MEDELEGH = 12'h312, /// Upper 32 bits of medeleg, RV32 only
+
+        // ====================================================
+        // * Machine Trap Handling
+        // ====================================================
+        MSCRATCH = 12'h340, /// Scratch register for machine trap handlers
+        MEPC = 12'h341, /// Machine exception program counter
+        MCAUSE = 12'h342, /// Machine trap cause
+        MTVAL = 12'h343, /// Machine bad address or instruction
+        MIP = 12'h344, /// Machine interrupt pending
+        // MTINST = 12'h34a, /// Machine trap instruction (transformed)
+        // MTVAL2 = 12'h34b, /// Machine bad guest physical address
+
+        // ====================================================
+        // * Machine Configuration
+        // ====================================================
+
+        // ====================================================
+        // * Machine Memory Protection
+        // ====================================================
+
+        // ====================================================
+        // * Machine State Enable Registers
+        // ====================================================
+
+        // ====================================================
+        // * Machine Non-Maskable Interrupt Handling
+        // ====================================================
+
+        // ====================================================
+        // * Machine Counter/Timers
+        // ====================================================
+        MCYCLE = 12'hB00, /// Machine cycle counter
+        MINSTRET = 12'hB02, /// Machine instructions-retired counter
+
+        // ====================================================
+        // * Machine Counter Setup
+        // ====================================================
+
+        // ====================================================
+        // * Debug/Trace Registers (shared with Debug Mode)
+        // ====================================================
+
+        // ====================================================
+        // * Debug Mode Registers
+        // ====================================================
+
+        // ====================================================
+        // * Custom
+        // ====================================================
+        LED = 12'h800,
+
+        // Unprivileged Counter/Timers
+        CYCLE = 12'hC00,
+        TIME = 12'hC01,
+        INSTRET = 12'hC02,
+    }
+
+    // Machine Implementation ID
+    const MACHINE_IMPLEMENTATION_ID: UIntX = 1;
+
     // wmasks
-    const MTVEC_WMASK : UIntX = 'hffff_ffff_ffff_fffc;
-    const MEPC_WMASK  : UIntX = 'hffff_ffff_ffff_fffe;
-    const MCAUSE_WMASK: UIntX = 'hffff_ffff_ffff_ffff;
-    const MTVAL_WMASK : UIntX = 'hffff_ffff_ffff_ffff;
-    const LED_WMASK   : UIntX = 'hffff_ffff_ffff_ffff;
+    const MSTATUS_WMASK : UIntX = 'h0000_0000_0000_0088 as UIntX;
+    const MTVEC_WMASK   : UIntX = 'hffff_ffff_ffff_fffd;
+    const MIE_WMASK     : UIntX = 'h0000_0000_0000_0088 as UIntX;
+    const MSCRATCH_WMASK: UIntX = 'hffff_ffff_ffff_ffff;
+    const MEPC_WMASK    : UIntX = 'hffff_ffff_ffff_fffe;
+    const MCAUSE_WMASK  : UIntX = 'hffff_ffff_ffff_ffff;
+    const MTVAL_WMASK   : UIntX = 'hffff_ffff_ffff_ffff;
+    const LED_WMASK     : UIntX = 'hffff_ffff_ffff_ffff;
 
     enum CsrCause: UIntX {
         INSTRUCTION_ADDRESS_MISALIGNED = 0,
@@ -89,5 +179,11 @@ package eei {
         LOAD_ADDRESS_MISALIGNED = 4,
         STORE_AMO_ADDRESS_MISALIGNED = 6,
         ENVIRONMENT_CALL_FROM_M_MODE = 11,
+        SUPERVISOR_SOFTWARE_INTERRUPT = 'h8000_0000_0000_0001,
+        MACHINE_SOFTWARE_INTERRUPT = 'h8000_0000_0000_0003,
+        SUPERVISOR_TIMER_INTERRUPT = 'h8000_0000_0000_0005,
+        MACHINE_TIMER_INTERRUPT = 'h8000_0000_0000_0007,
+        SUPERVISOR_EXTERNAL_INTERRUPT = 'h8000_0000_0000_0009,
+        MACHINE_EXTERNAL_INTERRUPT = 'h8000_0000_0000_000b,
     }
 }

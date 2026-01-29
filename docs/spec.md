@@ -40,7 +40,7 @@ c.f: https://msyksphinz-self.github.io/riscv-isadoc/html/index.html
 |                 | uret        |        |
 |                 | sret        |        |
 |                 | mret        | ✅     |
-|                 | wfi         |        |
+|                 | wfi         | wip    |
 |                 | sfence.vma  |        |
 |                 | lb          | ✅     |
 |                 | lh          | ✅     |

@@ -3,36 +3,81 @@ import corectrl::*;
 
 /// CSR module
 module csrunit (
-    clk        : input  clock            ,
-    rst        : input  reset            ,
-    valid      : input  logic            , /// Whether a command/instruction is being supplied
-    pc         : input  Addr             , /// Current Instruction Address
-    inst_bits  : input  Inst             , /// Bits representing current instruction
-    ctrl       : input  InstCtrl         , /// The instruction's `InstCtrl`
-    expt_info  : input  ExceptionInfo    , /// Exception Info
-    rd_addr    : input  logic        <5> , /// Current instruction's rd number
-    csr_addr   : input  logic        <12>, /// CSR address specified by the instruction (upper 12 bits of the instruction)
-    rs1_addr   : input  logic        <5> , /// `rs1` address
-    rs1_data   : input  UIntX            , /// `rs1` data
-    rdata      : output UIntX            , /// Result of reading the CSR by the CSR instruction
-    raise_trap : output logic            , /// 1 when raise trap
-    trap_vector: output Addr             , /// Address to jump to when an exception occurs
-    led        : output UIntX            , // LED
+    clk        : input   clock               ,
+    rst        : input   reset               ,
+    valid      : input   logic               , /// Whether a command/instruction is being supplied
+    pc         : input   Addr                , /// Current Instruction Address
+    inst_bits  : input   Inst                , /// Bits representing current instruction
+    ctrl       : input   InstCtrl            , /// The instruction's `InstCtrl`
+    expt_info  : input   ExceptionInfo       , /// Exception Info
+    rd_addr    : input   logic           <5> , /// Current instruction's rd number
+    csr_addr   : input   logic           <12>, /// CSR address specified by the instruction (upper 12 bits of the instruction)
+    rs1_addr   : input   logic           <5> , /// `rs1` address
+    rs1_data   : input   UIntX               , /// `rs1` data
+    can_intr   : input   logic               , /// Can an interrupt be generated?
+    rdata      : output  UIntX               , /// Result of reading the CSR by the CSR instruction
+    raise_trap : output  logic               , /// 1 when raise trap
+    trap_vector: output  Addr                , /// Address to jump to when an exception occurs
+    trap_return: output  logic               , /// Is this an instruction to return from a trap?
+    minstret   : input   UInt64              , /// minstret value
+    aclint     : modport aclint_if::slave    , // ACLINT
+    led        : output  UIntX               , // LED
 ) {
     // CSRR(W|S|C)[I] inst?
     let is_wsc: logic = ctrl.is_csr && ctrl.funct3[1:0] != 0;
     // MRET inst?
     let is_mret: logic = inst_bits == 32'h30200073;
+    // WFI inst?
+    let is_wfi: logic = inst_bits == 32'h10500073;
 
     // Check CSR access (Consider: judge in ID stage?)
     let will_not_write_csr     : logic = (ctrl.funct3[1:0] == 2 || ctrl.funct3[1:0] == 3) && rs1_addr == 0; // set/clear with source = 0
     let expt_write_readonly_csr: logic = is_wsc && !will_not_write_csr && csr_addr[11:10] == 2'b11; // attempt to write read-only CSR
 
+    var mode: PrivMode;
+
     // CSR
-    var mtvec : UIntX;
-    var mepc  : UIntX;
-    var mcause: UIntX;
-    var mtval : UIntX;
+    let mhartid : UIntX  = 0;
+    var mstatus : UIntX ;
+    let misa    : UIntX  = {2'd2, 1'b0 repeat XLEN - 28, 26'b00000000000001000100000101}; // M, I, C, A
+    var mtvec   : UIntX ;
+    var mepc    : UIntX ;
+    var mcause  : UIntX ;
+    var mtval   : UIntX ;
+    var mcycle  : UInt64;
+    var mscratch: UIntX ;
+    var mie     : UIntX ;
+
+    let mip: UIntX = {
+        1'b0 repeat XLEN - 12, // 0, LCOFIP
+        1'b0, // MEIP
+        1'b0, // 0
+        1'b0, // SEIP
+        1'b0, // 0
+        aclint.mtip, // MTIP
+        1'b0, // 0
+        1'b0, // STIP
+        1'b0, // 0
+        aclint.msip, // MSIP
+        1'b0, // 0
+        1'b0, // SSIP
+        1'b0, // 0
+    };
+
+    // mstatus bits
+    let mstatus_mpie: logic = mstatus[7];
+    let mstatus_mie : logic = mstatus[3];
+
+    // Interrupt
+    let interrupt_pending: UIntX = mip & mie;
+    let raise_interrupt  : logic = valid && can_intr && mstatus_mie && interrupt_pending != 0;
+    let interrupt_cause  : UIntX = switch {
+        interrupt_pending[3]: CsrCause::MACHINE_SOFTWARE_INTERRUPT,
+        interrupt_pending[7]: CsrCause::MACHINE_TIMER_INTERRUPT,
+        default             : 0,
+    };
+    let interrupt_vector: Addr = if mtvec[0] == 0 ? {mtvec[msb:2], 2'b0} : // Direct
+     {mtvec[msb:2] + interrupt_cause[msb - 2:0], 2'b0}; // Vectored
 
     var wmask: UIntX; // write mask
     var wdata: UIntX; // write data
@@ -40,21 +85,36 @@ module csrunit (
     always_comb {
         // read
         rdata = case csr_addr {
-            CsrAddr::MTVEC : mtvec,
-            CsrAddr::MEPC  : mepc,
-            CsrAddr::MCAUSE: mcause,
-            CsrAddr::MTVAL : mtval,
-            CsrAddr::LED   : led,
-            default        : 'x,
+            CsrAddr::MISA    : misa,
+            CsrAddr::MIMPID  : MACHINE_IMPLEMENTATION_ID,
+            CsrAddr::MHARTID : mhartid,
+            CsrAddr::MSTATUS : mstatus,
+            CsrAddr::MTVEC   : mtvec,
+            CsrAddr::MIP     : mip,
+            CsrAddr::MIE     : mie,
+            CsrAddr::MCYCLE  : mcycle,
+            CsrAddr::MINSTRET: minstret,
+            CsrAddr::MSCRATCH: mscratch,
+            CsrAddr::MEPC    : mepc,
+            CsrAddr::MCAUSE  : mcause,
+            CsrAddr::MTVAL   : mtval,
+            CsrAddr::LED     : led,
+            CsrAddr::CYCLE   : mcycle,
+            CsrAddr::TIME    : aclint.mtime,
+            CsrAddr::INSTRET : minstret,
+            default          : 'x,
         };
         // write
         wmask = case csr_addr {
-            CsrAddr::MTVEC : MTVEC_WMASK,
-            CsrAddr::MEPC  : MEPC_WMASK,
-            CsrAddr::MCAUSE: MCAUSE_WMASK,
-            CsrAddr::MTVAL : MTVAL_WMASK,
-            CsrAddr::LED   : LED_WMASK,
-            default        : 0,
+            CsrAddr::MSTATUS : MSTATUS_WMASK,
+            CsrAddr::MTVEC   : MTVEC_WMASK,
+            CsrAddr::MIE     : MIE_WMASK,
+            CsrAddr::MSCRATCH: MSCRATCH_WMASK,
+            CsrAddr::MEPC    : MEPC_WMASK,
+            CsrAddr::MCAUSE  : MCAUSE_WMASK,
+            CsrAddr::MTVAL   : MTVAL_WMASK,
+            CsrAddr::LED     : LED_WMASK,
+            default          : 0,
         };
         let wsource: UIntX = if ctrl.funct3[2] ? {1'b0 repeat XLEN - 5, rs1_addr} : rs1_data;
         wdata   = case ctrl.funct3[1:0] {
@@ -67,32 +127,50 @@ module csrunit (
 
     always_ff {
         if_reset {
-            mtvec  = 0;
-            mepc   = 0;
-            mcause = 0;
-            mtval  = 0;
-            led    = 0;
+            mode     = PrivMode::M;
+            mstatus  = 0;
+            mtvec    = 0;
+            mie      = 0;
+            mscratch = 0;
+            mcycle   = 0;
+            mepc     = 0;
+            mcause   = 0;
+            mtval    = 0;
+            led      = 0;
         } else {
+            mcycle += 1;
             if valid {
                 if raise_trap {
-                    if raise_expt {
-                        mepc   = pc;
+                    if raise_expt || raise_interrupt {
+                        mepc = if raise_expt ? pc : // exception
+                         if raise_interrupt && is_wfi ? pc + 4 : pc; // interrupt when wfi / interrupt
                         mcause = trap_cause;
-                        mtval  = expt_value;
+                        mtval  = if raise_expt ? expt_value : 0;
+                        // save mstatus.mie to mstatus.mpie
+                        // and set mstatus.mie = 0
+                        mstatus[7] = mstatus[3];
+                        mstatus[3] = 0;
+                    } else if trap_return {
+                        // set mstatus.mie = mstatus.mpie
+                        //     mstatus.mpie = 1
+                        mstatus[3] = mstatus[7];
+                        mstatus[7] = 1;
                     }
                 } else {
                     if is_wsc {
                         case csr_addr {
-                            CsrAddr::MTVEC : mtvec  = wdata;
-                            CsrAddr::MEPC  : mepc   = wdata;
-                            CsrAddr::MCAUSE: mcause = wdata;
-                            CsrAddr::MTVAL : mtval  = wdata;
-                            CsrAddr::LED   : led    = wdata;
-                            default        : {}
+                            CsrAddr::MSTATUS : mstatus  = wdata;
+                            CsrAddr::MTVEC   : mtvec    = wdata;
+                            CsrAddr::MIE     : mie      = wdata;
+                            CsrAddr::MSCRATCH: mscratch = wdata;
+                            CsrAddr::MEPC    : mepc     = wdata;
+                            CsrAddr::MCAUSE  : mcause   = wdata;
+                            CsrAddr::MTVAL   : mtval    = wdata;
+                            CsrAddr::LED     : led      = wdata;
+                            default          : {}
                         }
                     }
                 }
-
             }
         }
     }
@@ -109,9 +187,22 @@ module csrunit (
         expt_cause == CsrCause::ILLEGAL_INSTRUCTION: {1'b0 repeat XLEN - $bits(Inst), inst_bits},
         default                                    : 0
     };
+    let expt_vector: Addr = {mtvec[msb:2], 2'b0};
+
+    // Trap Return
+    assign trap_return = valid && is_mret && !raise_expt && !raise_interrupt;
 
     // Trap
-    assign raise_trap  = raise_expt || (valid && is_mret);
-    let trap_cause : UIntX = expt_cause;
-    assign trap_vector = if raise_expt ? mtvec : mepc;
+    assign raise_trap = raise_expt || raise_interrupt || trap_return;
+    let trap_cause: UIntX = switch {
+        raise_expt     : expt_cause,
+        raise_interrupt: interrupt_cause,
+        default        : 0,
+    };
+    assign trap_vector = switch {
+        raise_expt     : expt_vector,
+        raise_interrupt: interrupt_vector,
+        trap_return    : mepc,
+        default        : 0,
+    };
 }

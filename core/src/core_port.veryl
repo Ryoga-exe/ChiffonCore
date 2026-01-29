@@ -23,12 +23,14 @@ module core_port #(
 
     led: output UIntX,
 ) {
-    inst mmio_membus     : Membus;
-    inst mmio_ram_membus : Membus;
-    inst mmio_rom_membus : Membus;
-    inst mmio_uart_membus: Membus;
+    inst mmio_membus       : Membus;
+    inst mmio_ram_membus   : Membus;
+    inst mmio_rom_membus   : Membus;
+    inst mmio_aclint_membus: Membus;
+    inst mmio_uart_membus  : Membus;
 
-    inst rom_membus: membus_if::<ROM_DATA_WIDTH, ROM_ADDR_WIDTH>;
+    inst rom_membus     : membus_if::<ROM_DATA_WIDTH, ROM_ADDR_WIDTH>;
+    inst aclint_core_bus: aclint_if;
 
     // for instruction fetch
     inst i_membus     : Membus;
@@ -115,6 +117,14 @@ module core_port #(
         membus: rom_membus,
     );
 
+    // ACLINT
+    inst aclintm: aclint_memory (
+        clk                       ,
+        rst                       ,
+        membus: mmio_aclint_membus,
+        aclint: aclint_core_bus   ,
+    );
+
     // UART MMIO (16550-like)
     inst uart0: uart_mmio #(
         CLOCK_FREQUENCY: 125_000_000,
@@ -128,12 +138,13 @@ module core_port #(
     );
 
     inst mmioc: mmio_controller (
-        clk                          ,
-        rst                          ,
-        req_core   : mmio_membus     ,
-        ram_membus : mmio_ram_membus ,
-        rom_membus : mmio_rom_membus ,
-        uart_membus: mmio_uart_membus,
+        clk                              ,
+        rst                              ,
+        req_core     : mmio_membus       ,
+        ram_membus   : mmio_ram_membus   ,
+        rom_membus   : mmio_rom_membus   ,
+        aclint_membus: mmio_aclint_membus,
+        uart_membus  : mmio_uart_membus  ,
     );
 
     inst amou: amounit (
@@ -151,10 +162,11 @@ module core_port #(
     );
 
     inst u_core: core (
-        clk                    ,
-        rst                    ,
-        i_membus: i_membus_core,
-        d_membus: d_membus_core,
-        led                    ,
+        clk                      ,
+        rst                      ,
+        i_membus: i_membus_core  ,
+        d_membus: d_membus_core  ,
+        aclint  : aclint_core_bus,
+        led                      ,
     );
 }

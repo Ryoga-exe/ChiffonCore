@@ -7,6 +7,7 @@ module core (
     rst     : input   reset               ,
     i_membus: modport core_inst_if::master,
     d_membus: modport core_data_if::master,
+    aclint  : modport aclint_if::slave    ,
 
     led: output UIntX,
 ) {
@@ -331,7 +332,7 @@ module core (
     inst memu: memunit (
         clk                                   ,
         rst                                   ,
-        valid : mems_valid && !mems_expt.valid,
+        valid : mems_valid && !csru_raise_trap,
         is_new: mems_is_new                   ,
         ctrl  : mems_ctrl                     ,
         addr  : memu_addr                     ,
@@ -345,6 +346,9 @@ module core (
     var csru_rdata      : UIntX;
     var csru_raise_trap : logic;
     var csru_trap_vector: Addr ;
+    var csru_trap_return: logic;
+
+    var minstret: UInt64;
 
     inst csru: csrunit (
         clk                               ,
@@ -358,9 +362,13 @@ module core (
         csr_addr   : mems_inst_bits[31:20],
         rs1_addr   : memq_rdata.rs1_addr  ,
         rs1_data   : memq_rdata.rs1_data  ,
+        can_intr   : mems_is_new          ,
         rdata      : csru_rdata           ,
         raise_trap : csru_raise_trap      ,
         trap_vector: csru_trap_vector     ,
+        trap_return: csru_trap_return     ,
+        minstret                          ,
+        aclint                            ,
         led                               ,
     );
 
@@ -375,7 +383,7 @@ module core (
         wbq_wdata.alu_result = memq_rdata.alu_result;
         wbq_wdata.mem_rdata  = memu_rdata;
         wbq_wdata.csr_rdata  = csru_rdata;
-        wbq_wdata.raise_trap = csru_raise_trap;
+        wbq_wdata.raise_trap = csru_raise_trap && !csru_trap_return;
     }
 
     // ====================================================
@@ -395,6 +403,16 @@ module core (
         wbs_ctrl.is_csr                    : wbq_rdata.csr_rdata,
         default                            : wbq_rdata.alu_result,
     };
+
+    always_ff {
+        if_reset {
+            minstret = 0;
+        } else {
+            if wbq_rvalid && wbq_rready && !wbq_rdata.raise_trap {
+                minstret += 1;
+            }
+        }
+    }
 
     always_ff {
         if wbs_valid && wbs_ctrl.rwb_en && !wbq_rdata.raise_trap {
