@@ -1,8 +1,10 @@
 interface aclint_if {
     var msip: logic;
+    var mtip: logic;
 
     modport master {
         msip: output,
+        mtip: output,
     }
 
     modport slave {
